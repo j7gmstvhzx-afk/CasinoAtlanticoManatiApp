@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Casino Atlántico Manatí",
+    "slug": "casino-atlantico-manati",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "scheme": "casinoatlantico",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F19"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.casinoatlantico.manati"
+    },
+    "android": {
+      "package": "com.casinoatlantico.manati",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0F19"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-notifications"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

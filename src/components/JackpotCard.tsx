@@ -1,30 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Badge, Text } from '@/components/ui';
-import { AnimatedAmount } from './AnimatedAmount';
 import { colors, radius, shadow, spacing } from '@/theme';
 import type { Jackpot } from '@/types/domain';
-import { formatRelativeTime } from '@/utils/format';
+import { formatCurrency } from '@/utils/format';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-const trendBadge = {
-  hot: { tone: 'hot' as const, label: 'Caliente' },
-  rising: { tone: 'rising' as const, label: 'Subiendo' },
-  new: { tone: 'new' as const, label: 'Nuevo' },
-  steady: { tone: 'neutral' as const, label: 'Estable' },
-};
 
 type Props = {
   jackpot: Jackpot;
@@ -34,33 +19,21 @@ type Props = {
 
 export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
   const press = useSharedValue(1);
-  const pulse = useSharedValue(0);
-
-  useEffect(() => {
-    if (jackpot.trend === 'hot') {
-      pulse.value = withRepeat(
-        withSequence(withTiming(1, { duration: 900 }), withTiming(0, { duration: 900 })),
-        -1,
-        false,
-      );
-    } else {
-      pulse.value = withTiming(0);
-    }
-  }, [jackpot.trend, pulse]);
-
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
-  const glow = useAnimatedStyle(() => ({ opacity: 0.25 + pulse.value * 0.55 }));
 
-  const tb = trendBadge[jackpot.trend];
+  const handlePressIn = () => {
+    press.value = withSpring(0.98);
+    Haptics.selectionAsync();
+  };
+  const handlePressOut = () => {
+    press.value = withSpring(1);
+  };
 
   if (variant === 'hero') {
     return (
       <AnimatedPressable
-        onPressIn={() => {
-          press.value = withSpring(0.98);
-          Haptics.selectionAsync();
-        }}
-        onPressOut={() => (press.value = withSpring(1))}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         onPress={() => onPress?.(jackpot)}
         style={[styles.hero, shadow.lg, animated as any]}
       >
@@ -70,24 +43,14 @@ export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: jackpot.imageColor, opacity: 0 },
-            glow,
-          ]}
-        />
         <View style={styles.heroInner}>
-          <Badge label={tb.label} tone={tb.tone} showDot />
+          {jackpot.isNew ? <Badge label="Nuevo" tone="new" showDot /> : <Badge label="Premio destacado" tone="gold" showDot />}
           <Text variant="caption" tone="secondary" style={{ marginTop: spacing.md }}>
-            JACKPOT EN VIVO · {jackpot.game.toUpperCase()}
+            {jackpot.game.toUpperCase()}
           </Text>
-          <AnimatedAmount
-            value={jackpot.amount}
-            style={[styles.heroAmount as any]}
-          />
+          <Text style={styles.heroAmount}>{formatCurrency(jackpot.amount)}</Text>
           <Text variant="small" tone="muted">
-            Actualizado {formatRelativeTime(jackpot.updatedAt)}
+            Premio actualizado por la administración
           </Text>
         </View>
       </AnimatedPressable>
@@ -97,11 +60,8 @@ export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
   if (variant === 'tile') {
     return (
       <AnimatedPressable
-        onPressIn={() => {
-          press.value = withSpring(0.97);
-          Haptics.selectionAsync();
-        }}
-        onPressOut={() => (press.value = withSpring(1))}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         onPress={() => onPress?.(jackpot)}
         style={[styles.tile, animated as any]}
       >
@@ -111,14 +71,13 @@ export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Animated.View style={[StyleSheet.absoluteFill, glow, { backgroundColor: jackpot.imageColor }]} />
         <View style={styles.tileInner}>
-          <Badge label={tb.label} tone={tb.tone} />
+          {jackpot.isNew ? <Badge label="Nuevo" tone="new" /> : <View />}
           <View>
-            <Text variant="caption" tone="secondary">
+            <Text variant="caption" tone="secondary" numberOfLines={1}>
               {jackpot.game}
             </Text>
-            <AnimatedAmount value={jackpot.amount} style={styles.tileAmount as any} />
+            <Text style={styles.tileAmount}>{formatCurrency(jackpot.amount)}</Text>
           </View>
         </View>
       </AnimatedPressable>
@@ -127,16 +86,12 @@ export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
 
   return (
     <AnimatedPressable
-      onPressIn={() => {
-        press.value = withSpring(0.98);
-        Haptics.selectionAsync();
-      }}
-      onPressOut={() => (press.value = withSpring(1))}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       onPress={() => onPress?.(jackpot)}
       style={[styles.row, animated as any]}
     >
       <View style={[styles.rowThumb, { backgroundColor: jackpot.imageColor }]}>
-        <Animated.View style={[StyleSheet.absoluteFill, glow, { backgroundColor: jackpot.imageColor }]} />
         <Ionicons name="diamond" size={20} color="rgba(255,255,255,0.85)" />
       </View>
       <View style={{ flex: 1 }}>
@@ -144,12 +99,12 @@ export function JackpotCard({ jackpot, onPress, variant = 'row' }: Props) {
           <Text variant="bodyStrong" numberOfLines={1}>
             {jackpot.name}
           </Text>
-          <Badge label={tb.label} tone={tb.tone} />
+          {jackpot.isNew ? <Badge label="Nuevo" tone="new" /> : null}
         </View>
         <Text variant="small" tone="muted" numberOfLines={1}>
           {jackpot.game}
         </Text>
-        <AnimatedAmount value={jackpot.amount} style={styles.rowAmount as any} />
+        <Text style={styles.rowAmount}>{formatCurrency(jackpot.amount)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
     </AnimatedPressable>
@@ -210,7 +165,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   rowTop: {
     flexDirection: 'row',

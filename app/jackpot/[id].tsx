@@ -5,18 +5,10 @@ import { useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { Badge, Button, Card, Header, Screen, Text } from '@/components/ui';
-import { AnimatedAmount } from '@/components/AnimatedAmount';
+import { Badge, Card, Header, Screen, Text } from '@/components/ui';
 import { useJackpotsStore } from '@/store/useJackpotsStore';
 import { colors, palette, radius, spacing } from '@/theme';
-import { formatRelativeTime, formatNumber } from '@/utils/format';
-
-const trendBadge = {
-  hot: { tone: 'hot' as const, label: 'Caliente' },
-  rising: { tone: 'rising' as const, label: 'Subiendo' },
-  new: { tone: 'new' as const, label: 'Nuevo' },
-  steady: { tone: 'neutral' as const, label: 'Estable' },
-};
+import { formatCurrency, formatRelativeTime } from '@/utils/format';
 
 const categoryLabel = {
   progressive: 'Progresivo',
@@ -26,25 +18,25 @@ const categoryLabel = {
 
 export default function JackpotDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const init = useJackpotsStore((s) => s.init);
-  const jackpots = useJackpotsStore((s) => s.jackpots);
+  const load = useJackpotsStore((s) => s.load);
+  const snapshot = useJackpotsStore((s) => s.snapshot);
 
-  useEffect(() => init(), [init]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const jp = jackpots.find((j) => j.id === id);
+  const jp = snapshot?.jackpots.find((j) => j.id === id);
 
-  if (!jp) {
+  if (!jp || !snapshot) {
     return (
       <Screen>
-        <Header showBack title="Jackpot" />
+        <Header showBack title="Premio" />
         <View style={styles.empty}>
-          <Text variant="body" tone="muted">Cargando...</Text>
+          <Text tone="muted">Cargando...</Text>
         </View>
       </Screen>
     );
   }
-
-  const tb = trendBadge[jp.trend];
 
   return (
     <Screen>
@@ -58,24 +50,28 @@ export default function JackpotDetailScreen() {
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-            <Badge label={tb.label} tone={tb.tone} showDot />
+            {jp.isNew ? <Badge label="Nuevo" tone="new" showDot /> : <Badge label="Premio destacado" tone="gold" showDot />}
             <Text variant="caption" tone="secondary" style={{ marginTop: spacing.md }}>
-              JACKPOT EN VIVO
+              {jp.game.toUpperCase()}
             </Text>
-            <AnimatedAmount value={jp.amount} style={styles.heroAmount as any} />
+            <Text style={styles.heroAmount}>{formatCurrency(jp.amount)}</Text>
             <Text variant="small" tone="muted">
-              Actualizado {formatRelativeTime(jp.updatedAt)}
+              Actualizado {formatRelativeTime(snapshot.updatedAt)}
             </Text>
           </View>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(360)} style={styles.padded}>
           <Card variant="elevated" style={{ gap: spacing.md }}>
-            <Text variant="h3">Detalles del juego</Text>
+            <Text variant="h3">Detalles</Text>
             <DetailRow icon="game-controller" label="Juego" value={jp.game} />
             <DetailRow icon="layers" label="Categoría" value={categoryLabel[jp.category]} />
-            <DetailRow icon="trending-up" label="Tendencia" value={tb.label} />
-            <DetailRow icon="speedometer" label="Velocidad" value={`+$${formatNumber(Number(jp.ticker.toFixed(2)))}/s aprox.`} />
+            <DetailRow icon="cash" label="Monto del premio" value={formatCurrency(jp.amount)} />
+            <DetailRow
+              icon="time"
+              label="Última actualización"
+              value={formatRelativeTime(snapshot.updatedAt)}
+            />
           </Card>
         </Animated.View>
 
@@ -83,19 +79,15 @@ export default function JackpotDetailScreen() {
           <Card variant="glass" style={{ gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <Ionicons name="information-circle" size={18} color={colors.text.gold} />
-              <Text variant="bodyStrong">¿Cómo se gana?</Text>
+              <Text variant="bodyStrong">¿Cómo funciona?</Text>
             </View>
             <Text variant="small" tone="secondary">
               Visita Casino Atlántico Manatí y juega en cualquiera de las máquinas o mesas
-              participantes. El jackpot se actualiza en tiempo real y se entrega al ganador
-              al instante.
+              participantes. Los montos los publica la administración una vez al día y pueden
+              variar al momento de tu visita.
             </Text>
           </Card>
         </Animated.View>
-
-        <View style={styles.padded}>
-          <Button label="Ver ubicación en el mapa" variant="gold" fullWidth />
-        </View>
       </ScrollView>
     </Screen>
   );
@@ -106,7 +98,7 @@ function DetailRow({
   label,
   value,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
   label: string;
   value: string;
 }) {

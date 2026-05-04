@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Card, Text } from '@/components/ui';
-import { colors, radius, spacing } from '@/theme';
+import { colors, spacing } from '@/theme';
 import type { CasinoEvent } from '@/types/domain';
 
 const iconFor: Record<CasinoEvent['category'], keyof typeof Ionicons.glyphMap> = {
@@ -29,7 +29,7 @@ export function EventCard({ event, onPress }: Props) {
   const date = new Date(event.startsAt);
   const day = date.getDate();
   const month = date.toLocaleDateString('es-PR', { month: 'short' });
-  const fillRatio = event.attending / event.capacity;
+  const time = date.toLocaleTimeString('es-PR', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <Pressable
@@ -43,7 +43,7 @@ export function EventCard({ event, onPress }: Props) {
           <Text variant="caption" tone="gold">
             {month.toUpperCase()}
           </Text>
-          <Text variant="h1" tone="primary" style={{ lineHeight: 32 }}>
+          <Text variant="h1" style={{ lineHeight: 32 }}>
             {day}
           </Text>
         </View>
@@ -63,12 +63,12 @@ export function EventCard({ event, onPress }: Props) {
               {event.location}
             </Text>
           </View>
-          <View style={styles.fillBar}>
-            <View style={[styles.fillBarInner, { width: `${Math.min(100, fillRatio * 100)}%` }]} />
+          <View style={styles.row}>
+            <Ionicons name="time-outline" size={14} color={colors.text.muted} />
+            <Text variant="small" tone="muted">
+              {time}
+            </Text>
           </View>
-          <Text variant="caption" tone="muted">
-            {event.attending}/{event.capacity} confirmados
-          </Text>
         </View>
       </Card>
     </Pressable>
@@ -93,17 +93,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  fillBar: {
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    marginTop: spacing.sm,
-    overflow: 'hidden',
-  },
-  fillBarInner: {
-    height: '100%',
-    backgroundColor: colors.brand.gold,
-    borderRadius: radius.pill,
   },
 });

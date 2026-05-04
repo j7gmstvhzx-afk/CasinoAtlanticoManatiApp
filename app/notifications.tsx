@@ -13,7 +13,6 @@ const iconFor: Record<AppNotification['kind'], keyof typeof Ionicons.glyphMap> =
   jackpot: 'diamond',
   promo: 'gift',
   event: 'calendar',
-  loyalty: 'trophy',
   system: 'information-circle',
 };
 
@@ -21,7 +20,6 @@ const tintFor: Record<AppNotification['kind'], string> = {
   jackpot: '#F5C97A',
   promo: '#E5484D',
   event: '#6EA0E6',
-  loyalty: '#1FB07A',
   system: '#7B86A8',
 };
 

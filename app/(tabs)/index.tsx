@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,8 +14,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 import {
-  Badge,
-  Button,
   Card,
   Header,
   Screen,
@@ -26,26 +26,33 @@ import { PromotionCard } from '@/components/PromotionCard';
 import { EventCard } from '@/components/EventCard';
 import { QuickAction } from '@/components/QuickAction';
 import { useJackpotsStore } from '@/store/useJackpotsStore';
-import { useUserStore } from '@/store/useUserStore';
 import { useNotificationsStore } from '@/store/useNotificationsStore';
 import { api } from '@/services/api';
 import type { CasinoEvent, Promotion } from '@/types/domain';
 import { colors, spacing } from '@/theme';
-import { tierLabel } from '@/utils/format';
+import { formatRelativeTime } from '@/utils/format';
+
+const MAPS_URL = Platform.select({
+  ios: 'http://maps.apple.com/?q=Casino+Atl%C3%A1ntico+Manati',
+  android: 'geo:0,0?q=Casino+Atl%C3%A1ntico+Manati',
+  default: 'https://maps.google.com/?q=Casino+Atl%C3%A1ntico+Manati',
+}) as string;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const init = useJackpotsStore((s) => s.init);
-  const jackpots = useJackpotsStore((s) => s.jackpots);
+  const load = useJackpotsStore((s) => s.load);
+  const refreshJackpots = useJackpotsStore((s) => s.refresh);
+  const snapshot = useJackpotsStore((s) => s.snapshot);
   const loadingJackpots = useJackpotsStore((s) => s.loading);
-  const user = useUserStore((s) => s.user);
   const unread = useNotificationsStore((s) => s.unread);
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [events, setEvents] = useState<CasinoEvent[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => init(), [init]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const loadStatic = async () => {
     const [p, e] = await Promise.all([api.getPromotions(), api.getEvents()]);
@@ -60,13 +67,13 @@ export default function HomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await loadStatic();
+    await Promise.all([loadStatic(), refreshJackpots()]);
     setRefreshing(false);
   };
 
-  const featuredJackpot = useMemo(
-    () => jackpots.find((j) => j.trend === 'hot') ?? jackpots[0],
-    [jackpots],
+  const featured = useMemo(
+    () => snapshot?.jackpots.find((j) => j.isFeatured) ?? snapshot?.jackpots[0],
+    [snapshot],
   );
 
   const greeting = (() => {
@@ -75,6 +82,11 @@ export default function HomeScreen() {
     if (h < 19) return 'Buenas tardes';
     return 'Buenas noches';
   })();
+
+  const open = (url: string) => {
+    Haptics.selectionAsync();
+    Linking.openURL(url).catch(() => {});
+  };
 
   return (
     <Screen>
@@ -98,77 +110,83 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.brand.gold}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.gold} />
         }
       >
-        {/* Welcome / user state */}
-        <Animated.View entering={FadeInDown.duration(360)}>
-          <Card variant="glass" style={styles.welcome}>
-            <View style={{ flex: 1 }}>
-              <Text variant="caption" tone="gold">
-                {greeting.toUpperCase()}
-              </Text>
-              <Text variant="h2">{user.displayName}</Text>
-              <View style={styles.welcomeRow}>
-                <Badge label={`Club ${tierLabel[user.tier]}`} tone="gold" showDot />
-                {user.isGuest ? (
-                  <Pressable onPress={() => router.push('/auth')}>
-                    <Text variant="small" tone="gold">
-                      Crear cuenta →
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Text variant="small" tone="muted">
-                    {user.points} pts disponibles
-                  </Text>
-                )}
-              </View>
-            </View>
+        {/* Saludo */}
+        <Animated.View entering={FadeInDown.duration(360)} style={styles.padded}>
+          <Card variant="glass">
+            <Text variant="caption" tone="gold">
+              {greeting.toUpperCase()}
+            </Text>
+            <Text variant="h2" style={{ marginTop: 4 }}>
+              Bienvenido a Atlántico
+            </Text>
+            <Text variant="small" tone="muted" style={{ marginTop: 4 }}>
+              Promociones, premios, menú y más en un solo lugar.
+            </Text>
           </Card>
         </Animated.View>
 
-        {/* Featured live jackpot */}
-        <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ paddingHorizontal: spacing.lg }}>
-          {loadingJackpots || !featuredJackpot ? (
+        {/* Premio destacado */}
+        <Animated.View entering={FadeInDown.delay(60).duration(360)} style={styles.padded}>
+          {loadingJackpots || !featured ? (
             <Skeleton height={220} rounded="xl" />
           ) : (
-            <JackpotCard jackpot={featuredJackpot} variant="hero" onPress={(j) => router.push(`/jackpot/${j.id}`)} />
+            <JackpotCard
+              jackpot={featured}
+              variant="hero"
+              onPress={(j) => router.push(`/jackpot/${j.id}`)}
+            />
           )}
         </Animated.View>
 
         {/* Quick actions */}
         <Animated.View entering={FadeInDown.delay(120).duration(360)}>
           <View style={styles.quickRow}>
-            <QuickAction icon="map" label="Mapa" hint="Cómo llegar" tint={colors.brand.gold} onPress={() => {}} />
-            <QuickAction icon="restaurant" label="Menú" hint="Cocina criolla" tint="#3FD79A" onPress={() => {}} />
-            <QuickAction icon="logo-whatsapp" label="WhatsApp" hint="Atención" tint="#25D366" onPress={() => {}} />
-            <QuickAction icon="call" label="Llamar" hint="787-555-2200" tint="#6EA0E6" onPress={() => {}} />
+            <QuickAction icon="map" label="Mapa" hint="Cómo llegar" tint={colors.brand.gold} onPress={() => open(MAPS_URL)} />
+            <QuickAction
+              icon="logo-whatsapp"
+              label="WhatsApp"
+              hint="Atención"
+              tint="#25D366"
+              onPress={() => open('https://wa.me/17875552200')}
+            />
+            <QuickAction icon="call" label="Llamar" hint="787-555-2200" tint="#6EA0E6" onPress={() => open('tel:+17875552200')} />
+            <QuickAction icon="restaurant" label="Menú" hint="Cocina criolla" tint="#3FD79A" onPress={() => router.push('/menu')} />
           </View>
         </Animated.View>
 
-        {/* Live jackpots horizontal */}
+        {/* Premios del día (jackpots) */}
         <Animated.View entering={FadeInDown.delay(180).duration(360)}>
           <SectionHeader
-            title="Jackpots en vivo"
-            caption="Actualizados al segundo"
+            title="Premios del día"
+            caption={
+              snapshot
+                ? `Actualizado ${formatRelativeTime(snapshot.updatedAt)}`
+                : 'Cargando...'
+            }
             actionLabel="Ver todos"
             onAction={() => router.push('/jackpots')}
           />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
             {loadingJackpots
               ? [1, 2, 3].map((i) => <Skeleton key={i} width={220} height={140} rounded="lg" style={{ marginRight: spacing.md }} />)
-              : jackpots
-                  .filter((j) => j.id !== featuredJackpot?.id)
+              : (snapshot?.jackpots ?? [])
+                  .filter((j) => j.id !== featured?.id)
                   .slice(0, 6)
-                  .map((j) => <JackpotCard key={j.id} jackpot={j} variant="tile" onPress={(jp) => router.push(`/jackpot/${jp.id}`)} />)}
+                  .map((j) => (
+                    <JackpotCard
+                      key={j.id}
+                      jackpot={j}
+                      variant="tile"
+                      onPress={(jp) => router.push(`/jackpot/${jp.id}`)}
+                    />
+                  ))}
           </ScrollView>
         </Animated.View>
 
-        {/* Promotions */}
+        {/* Promociones */}
         <Animated.View entering={FadeInDown.delay(240).duration(360)}>
           <SectionHeader
             title="Promociones"
@@ -190,32 +208,14 @@ export default function HomeScreen() {
           </ScrollView>
         </Animated.View>
 
-        {/* Events */}
+        {/* Eventos */}
         <Animated.View entering={FadeInDown.delay(300).duration(360)}>
-          <SectionHeader title="Próximos eventos" caption="Reserva tu lugar" />
+          <SectionHeader title="Próximos eventos" caption="No te los pierdas" />
           <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
             {events.length === 0
               ? [1, 2].map((i) => <Skeleton key={i} height={92} rounded="lg" />)
               : events.slice(0, 3).map((e) => <EventCard key={e.id} event={e} />)}
           </View>
-        </Animated.View>
-
-        {/* Footer CTA */}
-        <Animated.View entering={FadeInDown.delay(360).duration(360)} style={{ paddingHorizontal: spacing.lg }}>
-          <Card variant="elevated" style={{ alignItems: 'center', gap: spacing.md }}>
-            <Text variant="h3" align="center">
-              ¿Listo para tu próxima visita?
-            </Text>
-            <Text variant="small" tone="muted" align="center">
-              Únete al Club Atlántico y acumula puntos en cada jugada.
-            </Text>
-            <Button
-              label={user.isGuest ? 'Crear cuenta' : 'Ver mis recompensas'}
-              variant="gold"
-              fullWidth
-              onPress={() => router.push(user.isGuest ? '/auth' : '/rewards')}
-            />
-          </Card>
         </Animated.View>
       </ScrollView>
     </Screen>
@@ -249,17 +249,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.bg.base,
   },
-  welcome: {
-    marginHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  welcomeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.sm,
+  padded: {
+    paddingHorizontal: spacing.lg,
   },
   hScroll: {
     paddingHorizontal: spacing.lg,

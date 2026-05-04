@@ -1,17 +1,21 @@
 export type JackpotCategory = 'progressive' | 'slots' | 'tables';
-export type JackpotTrend = 'hot' | 'rising' | 'new' | 'steady';
 
 export type Jackpot = {
   id: string;
   name: string;
   category: JackpotCategory;
+  game: string;
   amount: number;
   currency: 'USD';
-  trend: JackpotTrend;
-  game: string;
   imageColor: string;
-  ticker: number;
+  isNew?: boolean;
+  isFeatured?: boolean;
+};
+
+export type JackpotsSnapshot = {
+  jackpots: Jackpot[];
   updatedAt: string;
+  updatedBy?: string;
 };
 
 export type Promotion = {
@@ -30,33 +34,28 @@ export type CasinoEvent = {
   title: string;
   startsAt: string;
   location: string;
-  capacity: number;
-  attending: number;
   category: 'tournament' | 'show' | 'dining' | 'special';
+  description?: string;
 };
 
-export type LoyaltyTier = 'classic' | 'silver' | 'gold' | 'platinum' | 'diamond';
+export type MenuCategory = 'entradas' | 'criollo' | 'parrilla' | 'mariscos' | 'bebidas' | 'postres';
 
-export type Reward = {
+export type MenuItem = {
   id: string;
-  title: string;
+  name: string;
   description: string;
-  cost: number;
-  category: 'food' | 'play' | 'experience' | 'merch';
-  imageColor: string;
+  price: number;
+  category: MenuCategory;
+  spicy?: boolean;
+  popular?: boolean;
+  vegetarian?: boolean;
 };
 
-export type UserProfile = {
+export type GameTable = {
   id: string;
-  displayName: string;
-  email?: string;
-  isGuest: boolean;
-  tier: LoyaltyTier;
-  points: number;
-  pointsToNextTier: number;
-  streak: number;
-  lastSpinAt?: string;
-  joinedAt: string;
+  name: string;
+  description: string;
+  minBet?: number;
 };
 
 export type AppNotification = {
@@ -65,5 +64,12 @@ export type AppNotification = {
   body: string;
   createdAt: string;
   read: boolean;
-  kind: 'jackpot' | 'promo' | 'event' | 'loyalty' | 'system';
+  kind: 'jackpot' | 'promo' | 'event' | 'system';
+};
+
+export type Preferences = {
+  pushEnabled: boolean;
+  marketingEnabled: boolean;
+  hapticsEnabled: boolean;
+  pushToken?: string;
 };

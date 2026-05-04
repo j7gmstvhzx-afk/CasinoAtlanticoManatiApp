@@ -33,7 +33,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="jackpots"
         options={{
-          title: 'Jackpots',
+          title: 'Premios',
           tabBarIcon: ({ color, size }) => <Ionicons name="diamond" size={size} color={color} />,
         }}
       />
@@ -45,17 +45,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="rewards"
+        name="menu"
         options={{
-          title: 'Club',
-          tabBarIcon: ({ color, size }) => <Ionicons name="trophy" size={size} color={color} />,
+          title: 'Menú',
+          tabBarIcon: ({ color, size }) => <Ionicons name="restaurant" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="info"
         options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
+          title: 'Información',
+          tabBarIcon: ({ color, size }) => <Ionicons name="information-circle" size={size} color={color} />,
         }}
       />
     </Tabs>

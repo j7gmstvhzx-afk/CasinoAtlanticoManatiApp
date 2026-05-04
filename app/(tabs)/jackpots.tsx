@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 
 import { Chip, Header, Screen, Skeleton, Text } from '@/components/ui';
 import { JackpotCard } from '@/components/JackpotCard';
-import { useJackpotsStore } from '@/store/useJackpotsStore';
-import { colors, spacing } from '@/theme';
+import { useJackpotsStore, filterJackpots } from '@/store/useJackpotsStore';
+import { colors, radius, spacing } from '@/theme';
 import type { JackpotCategory } from '@/types/domain';
-import { formatCurrency, formatRelativeTime } from '@/utils/format';
+import { formatRelativeTime } from '@/utils/format';
 
 const filters: Array<{ key: JackpotCategory | 'all'; label: string }> = [
   { key: 'all', label: 'Todos' },
@@ -19,40 +20,58 @@ const filters: Array<{ key: JackpotCategory | 'all'; label: string }> = [
 
 export default function JackpotsScreen() {
   const router = useRouter();
-  const init = useJackpotsStore((s) => s.init);
-  const jackpots = useJackpotsStore((s) => s.jackpots);
+  const load = useJackpotsStore((s) => s.load);
+  const refresh = useJackpotsStore((s) => s.refresh);
+  const snapshot = useJackpotsStore((s) => s.snapshot);
   const loading = useJackpotsStore((s) => s.loading);
   const filter = useJackpotsStore((s) => s.filter);
   const setFilter = useJackpotsStore((s) => s.setFilter);
-  const [now, setNow] = useState(Date.now());
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => init(), [init]);
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 5000);
-    return () => clearInterval(id);
-  }, []);
+    load();
+  }, [load]);
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? jackpots : jackpots.filter((j) => j.category === filter)),
-    [jackpots, filter],
-  );
+  const list = snapshot?.jackpots ?? [];
+  const filtered = useMemo(() => filterJackpots(list, filter), [list, filter]);
 
-  const total = useMemo(() => jackpots.reduce((s, j) => s + j.amount, 0), [jackpots]);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
 
   return (
     <Screen>
-      <Header title="Jackpots" subtitle="En vivo · stream activo" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(360)} style={styles.totalCard}>
+      <Header title="Premios" subtitle="Casino Atlántico Manatí" />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.gold} />
+        }
+      >
+        <Animated.View entering={FadeInDown.duration(360)} style={styles.headerCard}>
+          <View style={styles.iconBubble}>
+            <Ionicons name="diamond" size={22} color={colors.brand.gold} />
+          </View>
           <Text variant="caption" tone="gold">
-            ACUMULADO TOTAL EN VIVO
+            LISTADO OFICIAL
           </Text>
-          <Text variant="display" tone="gold">
-            {formatCurrency(total)}
+          <Text variant="h2" align="center" style={{ marginTop: 4 }}>
+            Premios actualizados a diario
           </Text>
-          <Text variant="small" tone="muted">
-            Última sincronización {formatRelativeTime(new Date(now).toISOString())}
+          <Text variant="small" tone="muted" align="center" style={{ marginTop: 4 }}>
+            Los montos los publica la administración del casino una vez al día.
           </Text>
+          {snapshot ? (
+            <View style={styles.timestamp}>
+              <Ionicons name="time-outline" size={14} color={colors.text.gold} />
+              <Text variant="caption" tone="gold">
+                ACTUALIZADO {formatRelativeTime(snapshot.updatedAt).toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
         </Animated.View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
@@ -62,11 +81,7 @@ export default function JackpotsScreen() {
               label={f.label}
               active={filter === f.key}
               onPress={() => setFilter(f.key)}
-              count={
-                f.key === 'all'
-                  ? jackpots.length
-                  : jackpots.filter((j) => j.category === f.key).length
-              }
+              count={f.key === 'all' ? list.length : list.filter((j) => j.category === f.key).length}
             />
           ))}
         </ScrollView>
@@ -74,17 +89,23 @@ export default function JackpotsScreen() {
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
           {loading
             ? [1, 2, 3, 4].map((i) => <Skeleton key={i} height={88} rounded="lg" />)
-            : filtered.map((j) => (
-                <JackpotCard key={j.id} jackpot={j} onPress={(jp) => router.push(`/jackpot/${jp.id}`)} />
+            : filtered.map((j, idx) => (
+                <Animated.View key={j.id} entering={FadeInDown.delay(idx * 30).duration(280)}>
+                  <JackpotCard jackpot={j} onPress={(jp) => router.push(`/jackpot/${jp.id}`)} />
+                </Animated.View>
               ))}
           {!loading && filtered.length === 0 ? (
             <View style={styles.empty}>
-              <Text variant="body" tone="muted" align="center">
-                No hay jackpots en esta categoría todavía.
+              <Text tone="muted" align="center">
+                No hay premios en esta categoría todavía.
               </Text>
             </View>
           ) : null}
         </View>
+
+        <Text variant="caption" tone="muted" align="center" style={{ paddingHorizontal: spacing.lg }}>
+          Los montos pueden cambiar. Consulta en el casino para confirmar.
+        </Text>
       </ScrollView>
     </Screen>
   );
@@ -95,15 +116,33 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: spacing.lg,
   },
-  totalCard: {
+  headerCard: {
     marginHorizontal: spacing.lg,
     padding: spacing.xl,
-    borderRadius: 24,
+    borderRadius: radius.xl,
     backgroundColor: colors.bg.elevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border.gold,
     alignItems: 'center',
+  },
+  iconBubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(245,201,122,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  timestamp: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(245,201,122,0.12)',
   },
   filtersRow: {
     paddingHorizontal: spacing.lg,

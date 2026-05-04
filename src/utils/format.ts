@@ -40,11 +40,3 @@ export const formatCountdown = (targetIso: string) => {
   const seconds = totalSec % 60;
   return { days, hours, minutes, seconds, totalSec };
 };
-
-export const tierLabel: Record<string, string> = {
-  classic: 'Clásico',
-  silver: 'Plata',
-  gold: 'Oro',
-  platinum: 'Platino',
-  diamond: 'Diamante',
-};

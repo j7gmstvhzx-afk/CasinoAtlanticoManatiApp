@@ -5,18 +5,26 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
 import { palette } from '@/theme';
-import { useUserStore } from '@/store/useUserStore';
 import { useNotificationsStore } from '@/store/useNotificationsStore';
+import { usePreferencesStore } from '@/store/usePreferencesStore';
+import { registerForPushNotifications } from '@/services/pushNotifications';
 
 export default function RootLayout() {
-  const hydrateUser = useUserStore((s) => s.hydrate);
   const hydrateNotifications = useNotificationsStore((s) => s.hydrate);
+  const pushEnabled = usePreferencesStore((s) => s.pushEnabled);
+  const setPushToken = usePreferencesStore((s) => s.setPushToken);
 
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(palette.midnight).catch(() => {});
-    hydrateUser();
     hydrateNotifications();
-  }, [hydrateUser, hydrateNotifications]);
+  }, [hydrateNotifications]);
+
+  useEffect(() => {
+    if (!pushEnabled) return;
+    registerForPushNotifications().then((token) => {
+      if (token) setPushToken(token);
+    });
+  }, [pushEnabled, setPushToken]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.midnight }}>
@@ -30,7 +38,6 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
           <Stack.Screen name="notifications" options={{ presentation: 'modal' }} />
           <Stack.Screen name="jackpot/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="promotion/[id]" options={{ animation: 'slide_from_right' }} />

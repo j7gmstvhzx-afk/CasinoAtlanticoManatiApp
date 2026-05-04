@@ -31,7 +31,8 @@
       "expo-notifications"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/CasinoAtlanticoManatiApp"
     }
   }
 }

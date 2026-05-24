@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   FlatList, Pressable, StyleSheet, TextInput, View, useWindowDimensions,
 } from 'react-native';
@@ -47,7 +47,7 @@ export function MachineExplorer() {
   const clearFilters    = useSlotFloorStore(s => s.clearExplorerFilters);
   const getFiltered     = useSlotFloorStore(s => s.getFilteredMachines);
 
-  const machines = getFiltered();
+  const machines = useMemo(() => getFiltered(), [getFiltered, explorerSearch, explorerFilters]);
   const numCols  = width >= 900 ? 3 : width >= 600 ? 2 : 1;
 
   const openEdit = useCallback((m: SlotMachine) => {

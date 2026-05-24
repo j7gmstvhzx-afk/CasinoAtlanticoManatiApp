@@ -13,14 +13,16 @@ const RUBY   = '#E5484D';
 
 type Section = 'compra' | 'reubicacion' | 'cambio_juego';
 
-const compras       = machineChanges.filter(c => c.type === 'compra');
-const reubicaciones = machineChanges.filter(c => c.type === 'reubicacion');
-const cambios       = machineChanges.filter(c => c.type === 'cambio_juego');
+const CHANGES_BY_TYPE: Record<Section, MachineChange[]> = {
+  compra:       machineChanges.filter(c => c.type === 'compra'),
+  reubicacion:  machineChanges.filter(c => c.type === 'reubicacion'),
+  cambio_juego: machineChanges.filter(c => c.type === 'cambio_juego'),
+};
 
 const SECTION_CONFIG = [
-  { key: 'compra'       as Section, label: 'Compras',          count: compras.length,       color: TEAL,   icon: 'add-circle' as const },
-  { key: 'reubicacion'  as Section, label: 'Reubicaciones',    count: reubicaciones.length, color: GOLD,   icon: 'swap-horizontal' as const },
-  { key: 'cambio_juego' as Section, label: 'Cambios de Juego', count: cambios.length,       color: VIOLET, icon: 'game-controller' as const },
+  { key: 'compra'       as Section, label: 'Compras',          count: CHANGES_BY_TYPE.compra.length,       color: TEAL,   icon: 'add-circle' as const },
+  { key: 'reubicacion'  as Section, label: 'Reubicaciones',    count: CHANGES_BY_TYPE.reubicacion.length,  color: GOLD,   icon: 'swap-horizontal' as const },
+  { key: 'cambio_juego' as Section, label: 'Cambios de Juego', count: CHANGES_BY_TYPE.cambio_juego.length, color: VIOLET, icon: 'game-controller' as const },
 ];
 
 function ChangeRow({ item }: { item: MachineChange }) {
@@ -111,11 +113,11 @@ export function MachineChanges() {
       </View>
 
       {/* Accordions */}
-      {SECTION_CONFIG.map((sec, i) => (
+      {SECTION_CONFIG.map(sec => (
         <AccordionSection
           key={sec.key}
           section={sec}
-          items={[compras, reubicaciones, cambios][i]}
+          items={CHANGES_BY_TYPE[sec.key]}
         />
       ))}
 

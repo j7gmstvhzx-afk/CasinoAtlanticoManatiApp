@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Header, Screen } from '@/components/ui';
 import { useSlotFloorStore } from '@/store/useSlotFloorStore';
@@ -27,7 +27,8 @@ export default function SlotFloorScreen() {
 
   useEffect(() => { init(); }, [init]);
 
-  const ActiveSection = SECTION_COMPONENTS[activeIndex];
+  const safeIndex = Math.min(activeIndex, SECTION_COMPONENTS.length - 1);
+  const ActiveSection = SECTION_COMPONENTS[safeIndex];
 
   return (
     <Screen>
@@ -42,11 +43,12 @@ export default function SlotFloorScreen() {
       />
       <View style={styles.body}>
         {initialized ? (
-          <Animated.View key={activeIndex} entering={FadeIn.duration(220)} style={styles.section}>
+          <Animated.View key={safeIndex} entering={FadeIn.duration(220)} style={styles.section}>
             <ActiveSection />
           </Animated.View>
         ) : (
           <Animated.View entering={FadeIn.duration(300)} style={styles.loading}>
+            <ActivityIndicator size="large" color="#2a9d8f" />
           </Animated.View>
         )}
       </View>

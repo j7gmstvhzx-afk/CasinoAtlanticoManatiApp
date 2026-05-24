@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { seedSlotMachines } from '@/data/slotMachines';
 import { generateSeedCoinIn } from '@/data/seedCoinIn';
-import { calcPeriodTotal, periodStart, toDateString } from '@/utils/dateRange';
+import { calcPeriodTotal, periodStart, toDateString, subDays } from '@/utils/dateRange';
 import type {
   SlotMachine, CoinInEntry, FloorStats, ExplorerFilters,
   CoinInPeriod, SlotManufacturer, SlotMachineType,
@@ -51,8 +51,8 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
   };
 
   const safeStats = (vals: number[]) => ({
-    min: vals.length ? Math.min(...vals) : 0,
-    max: vals.length ? Math.max(...vals) : 0,
+    min: vals.length ? vals.reduce((a, b) => (b < a ? b : a)) : 0,
+    max: vals.length ? vals.reduce((a, b) => (b > a ? b : a)) : 0,
     avg: vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0,
     distribution: buildDist(vals),
   });
@@ -67,8 +67,8 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
     byManufacturer,
     byDenomination,
     minBetStats: {
-      min:             allMin.length ? Math.min(...allMin) : 0,
-      max:             allMin.length ? Math.max(...allMin) : 0,
+      min:             allMin.length ? allMin.reduce((a, b) => (b < a ? b : a)) : 0,
+      max:             allMin.length ? allMin.reduce((a, b) => (b > a ? b : a)) : 0,
       avg:             allMin.length ? minBetSum / allMin.length : 0,
       accessibleCount: accessible.length,
       highCount:       high.length,
@@ -151,9 +151,12 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   async addOrUpdateCoinIn(entry) {
     const prev = get().coinIn;
     const idx  = prev.findIndex(e => e.machineId === entry.machineId && e.date === entry.date);
-    const updated = idx >= 0
+    const upserted = idx >= 0
       ? prev.map((e, i) => (i === idx ? entry : e))
       : [...prev, entry];
+    // Keep at most 400 days of history to bound AsyncStorage size
+    const cutoff = toDateString(subDays(new Date(), 400));
+    const updated = upserted.filter(e => e.date >= cutoff);
     set({ coinIn: updated });
     try { await AsyncStorage.setItem(COININ_KEY, JSON.stringify(updated)); } catch {}
   },

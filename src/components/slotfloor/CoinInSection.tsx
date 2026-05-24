@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, TextInput, View,
@@ -32,12 +32,13 @@ export function CoinInSection() {
   const [amountStr, setAmountStr] = useState('');
 
   const machines           = useSlotFloorStore(s => s.machines);
+  const coinIn             = useSlotFloorStore(s => s.coinIn);
   const getPeriodTotal     = useSlotFloorStore(s => s.getPeriodTotal);
   const getTop             = useSlotFloorStore(s => s.getTopMachinesByCoinIn);
   const addOrUpdateCoinIn  = useSlotFloorStore(s => s.addOrUpdateCoinIn);
 
-  const total   = getPeriodTotal(period);
-  const topList = getTop(period, 10);
+  const total   = useMemo(() => getPeriodTotal(period), [getPeriodTotal, coinIn, period]);
+  const topList = useMemo(() => getTop(period, 10),     [getTop, coinIn, period]);
   const topMax  = topList[0]?.total ?? 1;
 
   const machineCount = machines.filter(m => m.active).length;

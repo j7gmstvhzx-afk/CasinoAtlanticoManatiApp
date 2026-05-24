@@ -58,6 +58,13 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="slotfloor"
+        options={{
+          title: 'Piso',
+          tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

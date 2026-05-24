@@ -71,3 +71,4 @@ export const theme = {
 
 export type Theme = typeof theme;
 export { colors, palette, typography };
+export type { TypographyToken } from './typography';

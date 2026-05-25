@@ -1,15 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { seedSlotMachines } from '@/data/slotMachines';
-import { generateSeedCoinIn } from '@/data/seedCoinIn';
+import { supabase } from '@/lib/supabase';
 import { calcPeriodTotal, periodStart, toDateString, subDays } from '@/utils/dateRange';
 import type {
-  SlotMachine, CoinInEntry, FloorStats, ExplorerFilters,
+  SlotMachine, CoinInEntry, FloorStats, ExplorerFilters, MachineChange,
   CoinInPeriod, SlotManufacturer, SlotMachineType,
 } from '@/types/domain';
-
-const MACHINES_KEY = 'slotfloor:machines';
-const COININ_KEY   = 'slotfloor:coinIn';
 
 // ── Stats computation ────────────────────────────────────────────────────────
 
@@ -32,12 +27,12 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
   }
   const byDenomination = Array.from(denoMap.entries()).map(([label, count]) => ({ label, count }));
 
-  const allMin = active.map(m => m.minBet);
-  const minBetSum = allMin.reduce((s, v) => s + v, 0);
+  const allMin  = active.map(m => m.minBet);
+  const minBetSum  = allMin.reduce((s, v) => s + v, 0);
   const accessible = active.filter(m => m.minBet <= 0.40);
   const high       = active.filter(m => m.minBet >= 0.50);
-  const accSum = accessible.reduce((s, m) => s + m.minBet, 0);
-  const hiSum  = high.reduce((s, m) => s + m.minBet, 0);
+  const accSum     = accessible.reduce((s, m) => s + m.minBet, 0);
+  const hiSum      = high.reduce((s, m) => s + m.minBet, 0);
 
   const max01Vals = active.map(m => m.maxBet01).filter((v): v is number => v !== null);
   const max05Vals = active.map(m => m.maxBet05).filter((v): v is number => v !== null);
@@ -51,9 +46,9 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
   };
 
   const safeStats = (vals: number[]) => ({
-    min: vals.length ? vals.reduce((a, b) => (b < a ? b : a)) : 0,
-    max: vals.length ? vals.reduce((a, b) => (b > a ? b : a)) : 0,
-    avg: vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0,
+    min:          vals.length ? vals.reduce((a, b) => (b < a ? b : a)) : 0,
+    max:          vals.length ? vals.reduce((a, b) => (b > a ? b : a)) : 0,
+    avg:          vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0,
     distribution: buildDist(vals),
   });
 
@@ -80,27 +75,86 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
   };
 }
 
+// ── Row mappers ───────────────────────────────────────────────────────────────
+
+function rowToMachine(row: Record<string, unknown>): SlotMachine {
+  return {
+    id:           String(row.id),
+    location:     String(row.location),
+    game:         String(row.game),
+    manufacturer: row.manufacturer as SlotManufacturer,
+    type:         row.type as SlotMachineType,
+    minBet:       Number(row.min_bet),
+    multiDeno:    Boolean(row.multi_deno),
+    denomination: String(row.denomination),
+    maxBet01:     row.max_bet_01 != null ? Number(row.max_bet_01) : null,
+    maxBet02:     row.max_bet_02 != null ? Number(row.max_bet_02) : null,
+    maxBet05:     row.max_bet_05 != null ? Number(row.max_bet_05) : null,
+    maxBet10:     row.max_bet_10 != null ? Number(row.max_bet_10) : null,
+    active:       Boolean(row.active),
+  };
+}
+
+function rowToCoinIn(row: Record<string, unknown>): CoinInEntry {
+  return {
+    machineId: String(row.machine_id),
+    date:      String(row.date),
+    amount:    Number(row.amount),
+  };
+}
+
+function rowToChange(row: Record<string, unknown>): MachineChange {
+  return {
+    mc:           String(row.mc),
+    type:         row.type as MachineChange['type'],
+    manufacturer: row.manufacturer as SlotManufacturer,
+    game2024:     row.game_2024 != null ? String(row.game_2024) : undefined,
+    game2025:     String(row.game_2025 ?? ''),
+    location2024: row.location_2024 != null ? String(row.location_2024) : undefined,
+    location2025: String(row.location_2025 ?? ''),
+    bank:         Number(row.bank ?? 0),
+  };
+}
+
+function machineToDbPatch(patch: Partial<SlotMachine>): Record<string, unknown> {
+  const db: Record<string, unknown> = {};
+  if (patch.game         !== undefined) db.game          = patch.game;
+  if (patch.manufacturer !== undefined) db.manufacturer  = patch.manufacturer;
+  if (patch.type         !== undefined) db.type          = patch.type;
+  if (patch.minBet       !== undefined) db.min_bet       = patch.minBet;
+  if (patch.denomination !== undefined) db.denomination  = patch.denomination;
+  if (patch.multiDeno    !== undefined) db.multi_deno    = patch.multiDeno;
+  if (patch.maxBet01     !== undefined) db.max_bet_01    = patch.maxBet01;
+  if (patch.maxBet02     !== undefined) db.max_bet_02    = patch.maxBet02;
+  if (patch.maxBet05     !== undefined) db.max_bet_05    = patch.maxBet05;
+  if (patch.maxBet10     !== undefined) db.max_bet_10    = patch.maxBet10;
+  if (patch.active       !== undefined) db.active        = patch.active;
+  db.updated_at = new Date().toISOString();
+  return db;
+}
+
 // ── Store interface ───────────────────────────────────────────────────────────
 
 interface SlotFloorStore {
-  initialized: boolean;
-  machines:    SlotMachine[];
-  coinIn:      CoinInEntry[];
-  floorStats:  FloorStats;
+  initialized:     boolean;
+  machines:        SlotMachine[];
+  coinIn:          CoinInEntry[];
+  machineChanges:  MachineChange[];
+  floorStats:      FloorStats;
   explorerSearch:  string;
   explorerFilters: ExplorerFilters;
 
-  init:                 () => Promise<void>;
-  updateMachine:        (id: string, patch: Partial<SlotMachine>) => Promise<void>;
-  batchUpdateMachines:  (ids: string[], patch: Partial<SlotMachine>) => Promise<void>;
-  addOrUpdateCoinIn:    (entry: CoinInEntry) => Promise<void>;
-  setExplorerSearch:    (q: string) => void;
-  setExplorerFilter:    (key: keyof ExplorerFilters, value: string | null) => void;
-  clearExplorerFilters: () => void;
+  init:                  () => Promise<void>;
+  updateMachine:         (id: string, patch: Partial<SlotMachine>) => Promise<void>;
+  batchUpdateMachines:   (ids: string[], patch: Partial<SlotMachine>) => Promise<void>;
+  addOrUpdateCoinIn:     (entry: CoinInEntry) => Promise<void>;
+  setExplorerSearch:     (q: string) => void;
+  setExplorerFilter:     (key: keyof ExplorerFilters, value: string | null) => void;
+  clearExplorerFilters:  () => void;
 
-  getFilteredMachines:   () => SlotMachine[];
-  getPeriodTotal:        (period: CoinInPeriod, machineId?: string) => number;
-  getTopMachinesByCoinIn:(period: CoinInPeriod, n?: number) => Array<{ machine: SlotMachine; total: number }>;
+  getFilteredMachines:    () => SlotMachine[];
+  getPeriodTotal:         (period: CoinInPeriod, machineId?: string) => number;
+  getTopMachinesByCoinIn: (period: CoinInPeriod, n?: number) => Array<{ machine: SlotMachine; total: number }>;
 }
 
 const EMPTY_STATS = computeFloorStats([]);
@@ -109,6 +163,7 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   initialized:     false,
   machines:        [],
   coinIn:          [],
+  machineChanges:  [],
   floorStats:      EMPTY_STATS,
   explorerSearch:  '',
   explorerFilters: { manufacturer: null, type: null, denomination: null },
@@ -117,19 +172,19 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   async init() {
     if (get().initialized) return;
     try {
-      const [mJson, cJson] = await Promise.all([
-        AsyncStorage.getItem(MACHINES_KEY),
-        AsyncStorage.getItem(COININ_KEY),
+      const [mRes, cRes, chRes] = await Promise.all([
+        supabase.from('machines').select('*'),
+        supabase.from('coin_in_entries').select('*'),
+        supabase.from('machine_changes').select('*'),
       ]);
-      const machines: SlotMachine[] = mJson ? JSON.parse(mJson) : seedSlotMachines;
-      const coinIn:   CoinInEntry[] = cJson  ? JSON.parse(cJson)  : generateSeedCoinIn(machines);
-      if (!mJson) await AsyncStorage.setItem(MACHINES_KEY, JSON.stringify(machines));
-      if (!cJson) await AsyncStorage.setItem(COININ_KEY,   JSON.stringify(coinIn));
-      set({ initialized: true, machines, coinIn, floorStats: computeFloorStats(machines) });
+
+      const machines       = (mRes.data  ?? []).map(r => rowToMachine(r as Record<string, unknown>));
+      const coinIn         = (cRes.data  ?? []).map(r => rowToCoinIn(r as Record<string, unknown>));
+      const machineChanges = (chRes.data ?? []).map(r => rowToChange(r as Record<string, unknown>));
+
+      set({ initialized: true, machines, coinIn, machineChanges, floorStats: computeFloorStats(machines) });
     } catch {
-      const machines = seedSlotMachines;
-      const coinIn   = generateSeedCoinIn(machines);
-      set({ initialized: true, machines, coinIn, floorStats: computeFloorStats(machines) });
+      set({ initialized: true });
     }
   },
 
@@ -137,14 +192,16 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   async updateMachine(id, patch) {
     const updated = get().machines.map(m => m.id === id ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
-    try { await AsyncStorage.setItem(MACHINES_KEY, JSON.stringify(updated)); } catch {}
+    await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
   },
 
   async batchUpdateMachines(ids, patch) {
-    const idSet = new Set(ids);
+    const idSet  = new Set(ids);
     const updated = get().machines.map(m => idSet.has(m.id) ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
-    try { await AsyncStorage.setItem(MACHINES_KEY, JSON.stringify(updated)); } catch {}
+    for (const id of ids) {
+      await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+    }
   },
 
   // ── coin-in ───────────────────────────────────────────────────────────────
@@ -154,19 +211,21 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     const upserted = idx >= 0
       ? prev.map((e, i) => (i === idx ? entry : e))
       : [...prev, entry];
-    // Keep at most 400 days of history to bound AsyncStorage size
+    // Prune client-side to 400 days
     const cutoff = toDateString(subDays(new Date(), 400));
     const updated = upserted.filter(e => e.date >= cutoff);
     set({ coinIn: updated });
-    try { await AsyncStorage.setItem(COININ_KEY, JSON.stringify(updated)); } catch {}
+    await supabase.from('coin_in_entries').upsert({
+      machine_id: entry.machineId,
+      date:       entry.date,
+      amount:     entry.amount,
+    });
   },
 
   // ── explorer ──────────────────────────────────────────────────────────────
-  setExplorerSearch: (q) => set({ explorerSearch: q }),
-  setExplorerFilter: (key, value) =>
-    set(s => ({ explorerFilters: { ...s.explorerFilters, [key]: value } })),
-  clearExplorerFilters: () =>
-    set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
+  setExplorerSearch:  (q)         => set({ explorerSearch: q }),
+  setExplorerFilter:  (key, value) => set(s => ({ explorerFilters: { ...s.explorerFilters, [key]: value } })),
+  clearExplorerFilters: ()         => set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
 
   // ── selectors ─────────────────────────────────────────────────────────────
   getFilteredMachines() {
@@ -193,7 +252,7 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     const { machines, coinIn } = get();
     const fromStr = toDateString(periodStart(period));
     const toStr   = toDateString(new Date());
-    const totals = machines.map(machine => {
+    const totals  = machines.map(machine => {
       const total = coinIn
         .filter(e => e.machineId === machine.id && e.date >= fromStr && e.date <= toStr)
         .reduce((s, e) => s + e.amount, 0);

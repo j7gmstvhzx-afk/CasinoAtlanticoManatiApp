@@ -1,25 +1,15 @@
 import React from 'react';
 import { StyleSheet, View, ViewProps } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { colors, palette } from '@/theme';
+import { colors } from '@/theme';
 
 type Props = ViewProps & {
-  scroll?: boolean;
   edges?: Array<'top' | 'bottom' | 'left' | 'right'>;
-  withGradient?: boolean;
 };
 
-export function Screen({ children, edges = ['top'], withGradient = true, style, ...rest }: Props) {
+export function Screen({ children, edges = ['top'], style, ...rest }: Props) {
   return (
     <View style={styles.root}>
-      {withGradient ? (
-        <LinearGradient
-          colors={[palette.midnight, palette.obsidian, palette.midnight]}
-          locations={[0, 0.5, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       <SafeAreaView edges={edges} style={[styles.safe, style]} {...rest}>
         {children}
       </SafeAreaView>

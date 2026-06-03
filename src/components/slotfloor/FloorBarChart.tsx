@@ -14,11 +14,11 @@ type Props = {
   title?: string;
 };
 
-const BAR_H    = 22;
-const GAP      = 10;
-const LABEL_W  = 90;
-const VALUE_W  = 48;
-const PAD_H    = 8;
+const BAR_H   = 22;
+const GAP     = 10;
+const LABEL_W = 90;
+const VALUE_W = 48;
+const PAD_H   = 8;
 
 export function FloorBarChart({ data, color = TEAL, title }: Props) {
   const { width } = useWindowDimensions();
@@ -38,29 +38,14 @@ export function FloorBarChart({ data, color = TEAL, title }: Props) {
       ) : null}
       <Svg width={chartW} height={svgH}>
         {data.map((item, i) => {
-          const y = PAD_H + i * (BAR_H + GAP);
+          const y      = PAD_H + i * (BAR_H + GAP);
           const filled = maxVal > 0 ? (item.value / maxVal) * barW : 0;
           return (
             <React.Fragment key={item.label}>
-              {/* Background bar */}
-              <Rect
-                x={LABEL_W}
-                y={y}
-                width={barW}
-                height={BAR_H}
-                rx={6}
-                fill="rgba(255,255,255,0.06)"
-              />
+              {/* Background track */}
+              <Rect x={LABEL_W} y={y} width={barW} height={BAR_H} rx={6} fill="rgba(0,0,0,0.05)" />
               {/* Filled bar */}
-              <Rect
-                x={LABEL_W}
-                y={y}
-                width={filled}
-                height={BAR_H}
-                rx={6}
-                fill={color}
-                fillOpacity={0.85}
-              />
+              <Rect x={LABEL_W} y={y} width={filled} height={BAR_H} rx={6} fill={color} fillOpacity={0.85} />
               {/* Label */}
               <SvgText
                 x={LABEL_W - 6}

@@ -30,8 +30,8 @@ export function Card({ variant = 'surface', padded = true, style, children, ...r
       style={[
         styles.base,
         variant === 'elevated' && styles.elevated,
-        variant === 'glass' && styles.glass,
-        variant === 'surface' && styles.surface,
+        variant === 'glass'    && styles.glass,
+        variant === 'surface'  && styles.surface,
         padded && styles.padded,
         style,
       ]}
@@ -52,7 +52,8 @@ const styles = StyleSheet.create({
   surface: {
     backgroundColor: colors.bg.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border.subtle,
+    borderColor: colors.border.default,
+    ...shadow.sm,
   },
   elevated: {
     backgroundColor: colors.bg.elevated,
@@ -61,8 +62,9 @@ const styles = StyleSheet.create({
     ...shadow.md,
   },
   glass: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border.default,
+    ...shadow.sm,
   },
 });

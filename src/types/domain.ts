@@ -88,6 +88,7 @@ export type SlotMachine = {
   maxBet05: number | null;
   maxBet10: number | null;
   active: boolean;
+  period?: string | null;
 };
 
 export type CoinInEntry = {

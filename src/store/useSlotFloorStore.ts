@@ -27,7 +27,7 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
   }
   const byDenomination = Array.from(denoMap.entries()).map(([label, count]) => ({ label, count }));
 
-  const allMin  = active.map(m => m.minBet);
+  const allMin     = active.map(m => m.minBet);
   const minBetSum  = allMin.reduce((s, v) => s + v, 0);
   const accessible = active.filter(m => m.minBet <= 0.40);
   const high       = active.filter(m => m.minBet >= 0.50);
@@ -92,6 +92,7 @@ function rowToMachine(row: Record<string, unknown>): SlotMachine {
     maxBet05:     row.max_bet_05 != null ? Number(row.max_bet_05) : null,
     maxBet10:     row.max_bet_10 != null ? Number(row.max_bet_10) : null,
     active:       Boolean(row.active),
+    period:       row.period != null ? String(row.period) : null,
   };
 }
 
@@ -129,11 +130,19 @@ function machineToDbPatch(patch: Partial<SlotMachine>): Record<string, unknown> 
   if (patch.maxBet05     !== undefined) db.max_bet_05    = patch.maxBet05;
   if (patch.maxBet10     !== undefined) db.max_bet_10    = patch.maxBet10;
   if (patch.active       !== undefined) db.active        = patch.active;
+  if (patch.period       !== undefined) db.period        = patch.period;
   db.updated_at = new Date().toISOString();
   return db;
 }
 
 // ── Store interface ───────────────────────────────────────────────────────────
+
+export type BankGroup = {
+  bank: string;
+  machines: SlotMachine[];
+  totalCoinIn: number;
+  topGame: string;
+};
 
 interface SlotFloorStore {
   initialized:     boolean;
@@ -155,6 +164,7 @@ interface SlotFloorStore {
   getFilteredMachines:    () => SlotMachine[];
   getPeriodTotal:         (period: CoinInPeriod, machineId?: string) => number;
   getTopMachinesByCoinIn: (period: CoinInPeriod, n?: number) => Array<{ machine: SlotMachine; total: number }>;
+  getBankGroups:          (period: CoinInPeriod) => BankGroup[];
 }
 
 const EMPTY_STATS = computeFloorStats([]);
@@ -174,7 +184,8 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     try {
       const [mRes, cRes, chRes] = await Promise.all([
         supabase.from('machines').select('*'),
-        supabase.from('coin_in_entries').select('*'),
+        // .range(0, 50000) bypasses the default 1000-row cap
+        supabase.from('coin_in_entries').select('*').range(0, 50000),
         supabase.from('machine_changes').select('*'),
       ]);
 
@@ -211,7 +222,6 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     const upserted = idx >= 0
       ? prev.map((e, i) => (i === idx ? entry : e))
       : [...prev, entry];
-    // Prune client-side to 400 days
     const cutoff = toDateString(subDays(new Date(), 400));
     const updated = upserted.filter(e => e.date >= cutoff);
     set({ coinIn: updated });
@@ -223,9 +233,9 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   },
 
   // ── explorer ──────────────────────────────────────────────────────────────
-  setExplorerSearch:  (q)         => set({ explorerSearch: q }),
-  setExplorerFilter:  (key, value) => set(s => ({ explorerFilters: { ...s.explorerFilters, [key]: value } })),
-  clearExplorerFilters: ()         => set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
+  setExplorerSearch:    (q)         => set({ explorerSearch: q }),
+  setExplorerFilter:    (key, value) => set(s => ({ explorerFilters: { ...s.explorerFilters, [key]: value } })),
+  clearExplorerFilters: ()          => set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
 
   // ── selectors ─────────────────────────────────────────────────────────────
   getFilteredMachines() {
@@ -252,12 +262,59 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     const { machines, coinIn } = get();
     const fromStr = toDateString(periodStart(period));
     const toStr   = toDateString(new Date());
-    const totals  = machines.map(machine => {
-      const total = coinIn
-        .filter(e => e.machineId === machine.id && e.date >= fromStr && e.date <= toStr)
-        .reduce((s, e) => s + e.amount, 0);
-      return { machine, total };
-    });
-    return totals.sort((a, b) => b.total - a.total).slice(0, n);
+    return machines
+      .map(machine => ({
+        machine,
+        total: coinIn
+          .filter(e => e.machineId === machine.id && e.date >= fromStr && e.date <= toStr)
+          .reduce((s, e) => s + e.amount, 0),
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, n);
+  },
+
+  getBankGroups(period) {
+    const { machines, coinIn } = get();
+    const fromStr = toDateString(periodStart(period));
+    const toStr   = toDateString(new Date());
+
+    const machineBankMap = new Map(machines.map(m => [m.id, m.location.split('-')[0]]));
+
+    const bankMap = new Map<string, { machines: SlotMachine[]; coinInByMachine: Map<string, number> }>();
+    for (const m of machines) {
+      const bank = m.location.split('-')[0];
+      if (!bankMap.has(bank)) bankMap.set(bank, { machines: [], coinInByMachine: new Map() });
+      bankMap.get(bank)!.machines.push(m);
+    }
+
+    for (const entry of coinIn) {
+      if (entry.date < fromStr || entry.date > toStr) continue;
+      const bank = machineBankMap.get(entry.machineId);
+      if (!bank) continue;
+      const group = bankMap.get(bank);
+      if (!group) continue;
+      group.coinInByMachine.set(
+        entry.machineId,
+        (group.coinInByMachine.get(entry.machineId) ?? 0) + entry.amount,
+      );
+    }
+
+    return Array.from(bankMap.entries())
+      .map(([bank, data]) => {
+        const totalCoinIn = Array.from(data.coinInByMachine.values()).reduce((s, v) => s + v, 0);
+        let topGame = '';
+        let topAmt  = 0;
+        for (const m of data.machines) {
+          const amt = data.coinInByMachine.get(m.id) ?? 0;
+          if (amt > topAmt) { topAmt = amt; topGame = m.game; }
+        }
+        return {
+          bank,
+          machines:    data.machines,
+          totalCoinIn,
+          topGame: topGame || (data.machines[0]?.game ?? ''),
+        };
+      })
+      .sort((a, b) => b.totalCoinIn - a.totalCoinIn);
   },
 }));

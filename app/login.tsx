@@ -4,9 +4,11 @@ import {
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Text } from '@/components/ui';
-import { colors, spacing, radius, palette } from '@/theme';
+import { spacing, radius } from '@/theme';
 import { useAuthStore } from '@/store/useAuthStore';
 
+const NAVY = '#1a2332';
+const GOLD = '#d4a574';
 const TEAL = '#2a9d8f';
 
 export default function LoginScreen() {
@@ -37,24 +39,24 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.card}>
-        {/* Logo area */}
+        {/* Logo */}
         <View style={styles.logoWrap}>
           <View style={styles.logoCircle}>
-            <Text variant="display" style={styles.logoChar}>CA</Text>
+            <Text style={styles.logoChar}>CA</Text>
           </View>
         </View>
 
-        <Text variant="h1" style={styles.title}>Casino Atlántico</Text>
-        <Text variant="caption" style={styles.subtitle}>PLATAFORMA OPERATIVA · MANATÍ</Text>
+        <Text style={styles.title}>Casino Atlántico</Text>
+        <Text style={styles.subtitle}>PLATAFORMA OPERATIVA · MANATÍ</Text>
 
-        {/* Inputs */}
+        {/* Fields */}
         <View style={styles.fields}>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
             placeholder="Correo electrónico"
-            placeholderTextColor={colors.text.muted}
+            placeholderTextColor="#94a3b8"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -65,30 +67,26 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="Contraseña"
-            placeholderTextColor={colors.text.muted}
+            placeholderTextColor="#94a3b8"
             secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleLogin}
           />
         </View>
 
-        {error && (
-          <Text variant="caption" style={styles.errorText}>{error}</Text>
-        )}
+        {error && <Text style={styles.errorText}>{error}</Text>}
 
         <Pressable
           style={[styles.btn, busy && styles.btnDisabled]}
           onPress={handleLogin}
           disabled={busy}
         >
-          <Text variant="bodyStrong" style={{ color: '#fff' }}>
+          <Text style={styles.btnText}>
             {busy ? 'Verificando...' : 'Iniciar sesión'}
           </Text>
         </Pressable>
 
-        <Text variant="caption" tone="muted" align="center" style={styles.hint}>
-          Acceso restringido al personal autorizado.
-        </Text>
+        <Text style={styles.hint}>Acceso restringido al personal autorizado.</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -97,7 +95,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: palette.midnight,
+    backgroundColor: NAVY,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
@@ -105,42 +103,63 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: '#ffffff',
     borderRadius: radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border.default,
     padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.20,
+    shadowRadius: 24,
+    elevation: 8,
   },
   logoWrap:   { marginBottom: spacing.sm },
   logoCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: TEAL + '22',
-    borderWidth: 2,
-    borderColor: TEAL + '66',
+    backgroundColor: NAVY,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoChar:  { color: TEAL, fontWeight: '800', fontSize: 24 },
-  title:     { fontWeight: '700', textAlign: 'center' },
-  subtitle:  { color: TEAL, letterSpacing: 1.2, textAlign: 'center', marginBottom: spacing.md },
-  fields:    { width: '100%', gap: spacing.md },
+  logoChar: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    color: GOLD,
+    fontWeight: '800',
+    fontSize: 24,
+    letterSpacing: 1,
+  },
+  title: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 24,
+    fontWeight: '800',
+    color: NAVY,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: TEAL,
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  fields: { width: '100%', gap: spacing.md },
   input: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: '#f8f9fa',
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border.default,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
-    color: colors.text.primary,
+    color: NAVY,
     fontSize: 15,
   },
   errorText: {
-    color: '#E5484D',
+    color: '#dc2626',
+    fontSize: 13,
     textAlign: 'center',
     marginTop: -spacing.xs,
   },
@@ -148,10 +167,20 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: TEAL,
+    backgroundColor: NAVY,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   btnDisabled: { opacity: 0.55 },
-  hint: { marginTop: spacing.sm },
+  btnText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  hint: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
 });

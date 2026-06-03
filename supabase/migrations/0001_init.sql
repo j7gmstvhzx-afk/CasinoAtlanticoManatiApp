@@ -80,9 +80,12 @@ create policy "own_profile"
   using (auth.uid() = id);
 
 -- machines: any authenticated user can read; only admins can write
+-- NOTE: use `to authenticated` rather than the deprecated auth.role()
+-- helper, which was removed in newer Postgres images and returns NULL
+-- (silently blocking every row).
 create policy "auth_read_machines"
   on public.machines for select
-  using (auth.role() = 'authenticated');
+  to authenticated using (true);
 
 create policy "admin_write_machines"
   on public.machines for all
@@ -96,7 +99,7 @@ create policy "admin_write_machines"
 -- coin_in_entries: same pattern
 create policy "auth_read_coinin"
   on public.coin_in_entries for select
-  using (auth.role() = 'authenticated');
+  to authenticated using (true);
 
 create policy "admin_write_coinin"
   on public.coin_in_entries for all
@@ -110,4 +113,4 @@ create policy "admin_write_coinin"
 -- machine_changes: read-only for all authenticated users
 create policy "auth_read_changes"
   on public.machine_changes for select
-  using (auth.role() = 'authenticated');
+  to authenticated using (true);

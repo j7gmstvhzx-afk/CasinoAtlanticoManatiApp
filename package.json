@@ -44,6 +44,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~18.3.12",
+    "dotenv": "^17.4.2",
     "typescript": "^5.3.3"
   },
   "private": true

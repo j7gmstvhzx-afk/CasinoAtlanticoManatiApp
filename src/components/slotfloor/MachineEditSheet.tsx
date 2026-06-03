@@ -6,6 +6,7 @@ import {
 import { Text } from '@/components/ui';
 import { colors, spacing, radius } from '@/theme';
 import { useSlotFloorStore } from '@/store/useSlotFloorStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import type { SlotMachine, SlotManufacturer, SlotMachineType } from '@/types/domain';
 
 const TEAL = '#2a9d8f';
@@ -73,6 +74,8 @@ function applyDraft(m: SlotMachine, d: Draft): Partial<SlotMachine> {
 
 export function MachineEditSheet({ machine, visible, onClose }: Props) {
   const updateMachine = useSlotFloorStore(s => s.updateMachine);
+  const role          = useAuthStore(s => s.profile?.role);
+  const isAdmin       = role === 'admin';
   const [draft, setDraft] = useState<Draft | null>(null);
 
   useEffect(() => {
@@ -253,11 +256,13 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
           {/* Buttons */}
           <View style={styles.btns}>
             <Pressable style={styles.cancelBtn} onPress={onClose}>
-              <Text variant="bodyStrong" tone="muted">Cancelar</Text>
+              <Text variant="bodyStrong" tone="muted">{isAdmin ? 'Cancelar' : 'Cerrar'}</Text>
             </Pressable>
-            <Pressable style={styles.saveBtn} onPress={handleSave}>
-              <Text variant="bodyStrong" style={{ color: colors.text.primary }}>Guardar</Text>
-            </Pressable>
+            {isAdmin && (
+              <Pressable style={styles.saveBtn} onPress={handleSave}>
+                <Text variant="bodyStrong" style={{ color: colors.text.primary }}>Guardar</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>

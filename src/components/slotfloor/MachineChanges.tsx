@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { colors, spacing, radius } from '@/theme';
-import { machineChanges } from '@/data/machineChanges';
+import { useSlotFloorStore } from '@/store/useSlotFloorStore';
 import type { MachineChange } from '@/types/domain';
 
 const TEAL   = '#2a9d8f';
@@ -13,17 +13,14 @@ const RUBY   = '#E5484D';
 
 type Section = 'compra' | 'reubicacion' | 'cambio_juego';
 
-const CHANGES_BY_TYPE: Record<Section, MachineChange[]> = {
-  compra:       machineChanges.filter(c => c.type === 'compra'),
-  reubicacion:  machineChanges.filter(c => c.type === 'reubicacion'),
-  cambio_juego: machineChanges.filter(c => c.type === 'cambio_juego'),
+type SectionConfig = {
+  key:   Section;
+  label: string;
+  count: number;
+  color: string;
+  icon:  React.ComponentProps<typeof Ionicons>['name'];
 };
 
-const SECTION_CONFIG = [
-  { key: 'compra'       as Section, label: 'Compras',          count: CHANGES_BY_TYPE.compra.length,       color: TEAL,   icon: 'add-circle' as const },
-  { key: 'reubicacion'  as Section, label: 'Reubicaciones',    count: CHANGES_BY_TYPE.reubicacion.length,  color: GOLD,   icon: 'swap-horizontal' as const },
-  { key: 'cambio_juego' as Section, label: 'Cambios de Juego', count: CHANGES_BY_TYPE.cambio_juego.length, color: VIOLET, icon: 'game-controller' as const },
-];
 
 function ChangeRow({ item }: { item: MachineChange }) {
   return (
@@ -64,7 +61,7 @@ function ChangeRow({ item }: { item: MachineChange }) {
 function AccordionSection({
   section, items,
 }: {
-  section: typeof SECTION_CONFIG[number];
+  section: SectionConfig;
   items: MachineChange[];
 }) {
   const [open, setOpen] = useState(false);
@@ -94,6 +91,20 @@ function AccordionSection({
 }
 
 export function MachineChanges() {
+  const allChanges = useSlotFloorStore(s => s.machineChanges);
+
+  const CHANGES_BY_TYPE = useMemo<Record<Section, MachineChange[]>>(() => ({
+    compra:       allChanges.filter(c => c.type === 'compra'),
+    reubicacion:  allChanges.filter(c => c.type === 'reubicacion'),
+    cambio_juego: allChanges.filter(c => c.type === 'cambio_juego'),
+  }), [allChanges]);
+
+  const SECTION_CONFIG = useMemo(() => [
+    { key: 'compra'       as Section, label: 'Compras',          count: CHANGES_BY_TYPE.compra.length,       color: TEAL,   icon: 'add-circle'      as const },
+    { key: 'reubicacion'  as Section, label: 'Reubicaciones',    count: CHANGES_BY_TYPE.reubicacion.length,  color: GOLD,   icon: 'swap-horizontal' as const },
+    { key: 'cambio_juego' as Section, label: 'Cambios de Juego', count: CHANGES_BY_TYPE.cambio_juego.length, color: VIOLET, icon: 'game-controller' as const },
+  ], [CHANGES_BY_TYPE]);
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 

@@ -15,6 +15,7 @@
     "@expo/vector-icons": "^14.0.4",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
+    "@supabase/supabase-js": "^2.106.2",
     "expo": "~52.0.20",
     "expo-asset": "~11.0.5",
     "expo-blur": "~14.0.1",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~18.3.12",
+    "dotenv": "^17.4.2",
     "typescript": "^5.3.3"
   },
   "private": true

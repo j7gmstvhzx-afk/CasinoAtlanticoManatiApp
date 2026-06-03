@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, TextInput, View,
@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { colors, spacing, radius } from '@/theme';
 import { useSlotFloorStore } from '@/store/useSlotFloorStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { todayString } from '@/utils/dateRange';
 import { formatCurrency } from '@/utils/format';
 import type { CoinInPeriod } from '@/types/domain';
@@ -31,6 +32,7 @@ export function CoinInSection() {
   const [dateStr, setDateStr]     = useState(todayString());
   const [amountStr, setAmountStr] = useState('');
 
+  const isAdmin            = useAuthStore(s => s.profile?.role === 'admin');
   const machines           = useSlotFloorStore(s => s.machines);
   const coinIn             = useSlotFloorStore(s => s.coinIn);
   const getPeriodTotal     = useSlotFloorStore(s => s.getPeriodTotal);
@@ -121,11 +123,13 @@ export function CoinInSection() {
           })}
         </View>
 
-        {/* Register button */}
-        <Pressable style={styles.addBtn} onPress={() => setShowModal(true)}>
-          <Ionicons name="add-circle" size={20} color={colors.text.primary} />
-          <Text variant="bodyStrong">Registrar Coin-In</Text>
-        </Pressable>
+        {/* Register button — admin only */}
+        {isAdmin && (
+          <Pressable style={styles.addBtn} onPress={() => setShowModal(true)}>
+            <Ionicons name="add-circle" size={20} color={colors.text.primary} />
+            <Text variant="bodyStrong">Registrar Coin-In</Text>
+          </Pressable>
+        )}
 
       </ScrollView>
 

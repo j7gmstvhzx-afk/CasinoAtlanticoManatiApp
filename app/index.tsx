@@ -14,7 +14,7 @@ import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { MachineRow } from '@/components/dashboard/MachineRow';
-import { C, card, money, compactMoney, mfrColor, shortMfr } from '@/components/dashboard/shared';
+import { C, card, money, mfrColor, shortMfr, useResponsive, MAX_CONTENT } from '@/components/dashboard/shared';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
 type Metric = 'avgCoinIn' | 'avgWin';
@@ -74,17 +74,16 @@ function ResumeSection({ metric }: { metric: Metric }) {
   }));
 
   const winPctStr = floorStats.winPct.toFixed(1) + '%';
+  const bankCount = new Set(machines.map(m => m.location.split('-')[0])).size;
 
   return (
     <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
-      {/* KPI grid */}
-      <View style={styles.kpiRow}>
-        <StatCard label="Total Máquinas"  value={String(floorStats.total)}  pillText={`${new Set(machines.map(m => m.location.split('-')[0])).size} Bancos`} pillTone="neutral" />
-        <StatCard label="Avg Coin-In"     value={compactMoney(floorStats.avgCoinIn)}  pillText="por máq." pillTone="neutral" />
-      </View>
-      <View style={styles.kpiRow}>
-        <StatCard label="Avg Win"         value={compactMoney(floorStats.avgWin)}   pillText="por máq." pillTone="positive" />
-        <StatCard label="Win %"           value={winPctStr}  pillText="Win / Coin-In" pillTone="gold" />
+      {/* KPI grid — auto-reflows 4 / 2 / 1 across by screen width */}
+      <View style={styles.kpiGrid}>
+        <StatCard label="Total Máquinas" value={String(floorStats.total)} icon="grid-outline"      tone="navy"  sub={`${bankCount} bancos en piso`} />
+        <StatCard label="Avg Coin-In"    value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio por máquina" />
+        <StatCard label="Avg Win"        value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Promedio por máquina" />
+        <StatCard label="Win %"          value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win / Coin-In" />
       </View>
 
       {/* Best 5 banks */}
@@ -605,6 +604,7 @@ const styles = StyleSheet.create({
   sectionContent: { padding: 16, gap: 14, paddingBottom: 48 },
 
   kpiRow:         { flexDirection: 'row', gap: 14 },
+  kpiGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   footer:         { fontSize: 12, color: C.faint, textAlign: 'center', marginTop: 8 },
   empty:          { fontSize: 14, color: C.faint, textAlign: 'center', paddingVertical: 24 },
 

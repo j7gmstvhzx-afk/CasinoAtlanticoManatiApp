@@ -1,74 +1,92 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C } from './shared';
-
-type PillTone = 'neutral' | 'positive' | 'gold';
+import { C, TONES, type Tone } from './shared';
 
 type Props = {
   label: string;
   value: string;
-  pillText?: string;
-  pillTone?: PillTone;
+  icon?: keyof typeof Ionicons.glyphMap;
+  tone?: Tone;
+  sub?: string;
 };
 
-export function StatCard({ label, value, pillText, pillTone = 'neutral' }: Props) {
-  const pill = PILL[pillTone];
+export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
+  const t = TONES[tone];
   return (
     <View style={styles.card}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-      {pillText ? (
-        <View style={[styles.pill, { backgroundColor: pill.bg }]}>
-          <Text style={[styles.pillText, { color: pill.fg }]}>{pillText}</Text>
-        </View>
-      ) : null}
+      <View style={styles.header}>
+        {icon ? (
+          <View style={[styles.iconBadge, { backgroundColor: t.bg }]}>
+            <Ionicons name={icon} size={18} color={t.fg} />
+          </View>
+        ) : null}
+        <Text style={styles.label} numberOfLines={2}>{label}</Text>
+      </View>
+
+      <Text
+        style={[styles.value, { color: t.fg }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+      >
+        {value}
+      </Text>
+
+      {sub ? <Text style={styles.sub} numberOfLines={2}>{sub}</Text> : null}
     </View>
   );
 }
 
-const PILL: Record<PillTone, { bg: string; fg: string }> = {
-  neutral:  { bg: '#eef1f5', fg: C.navy3 },
-  positive: { bg: C.greenBg, fg: C.green },
-  gold:     { bg: '#f6ecdd', fg: C.gold },
-};
-
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
+    // Responsive: grows to fill, wraps when it can't keep its basis width.
+    flexGrow: 1,
+    flexBasis: 200,
+    minWidth: 168,
     backgroundColor: C.card,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 20,
+    borderWidth: 1,
+    borderColor: C.border,
     shadowColor: '#1a2332',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
-    minHeight: 132,
+    gap: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 36,
+  },
+  iconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.muted,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  value: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: C.ink,
-    letterSpacing: -1,
-  },
-  pill: {
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 12,
-  },
-  pillText: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    lineHeight: 15,
+  },
+  value: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+  },
+  sub: {
+    fontSize: 12,
+    color: C.muted,
+    lineHeight: 16,
   },
 });

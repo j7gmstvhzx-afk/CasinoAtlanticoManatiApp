@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 
 // ── Palette (matches Slot Floor Analytics reference) ─────────────────────────
 export const C = {
@@ -57,6 +57,45 @@ export function compactMoney(n: number): string {
 export function bankOf(location: string): string {
   return location.split('-')[0];
 }
+
+// ── Responsive layout ────────────────────────────────────────────────────────
+// Single source of truth for breakpoints so the whole app reflows by screen size.
+export const MAX_CONTENT = 1180;
+
+export type Responsive = {
+  width: number;
+  isPhone: boolean;     // < 640
+  isTablet: boolean;    // 640–1024
+  isDesktop: boolean;   // ≥ 1024
+  gutter: number;       // horizontal page padding
+  kpiCols: number;      // KPI cards per row
+};
+
+export function useResponsive(): Responsive {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+  const isTablet  = width >= 640 && width < 1024;
+  const isPhone   = width < 640;
+  return {
+    width,
+    isPhone,
+    isTablet,
+    isDesktop,
+    gutter:  isDesktop ? 32 : isTablet ? 24 : 16,
+    kpiCols: width >= 1024 ? 4 : width >= 560 ? 2 : 1,
+  };
+}
+
+// ── Tone palette for KPI / icon badges ───────────────────────────────────────
+export type Tone = 'navy' | 'gold' | 'green' | 'teal' | 'red';
+
+export const TONES: Record<Tone, { fg: string; bg: string; soft: string }> = {
+  navy:  { fg: '#1a2332', bg: '#eaeef4', soft: '#f3f6fa' },
+  gold:  { fg: '#b8863f', bg: '#f7edda', soft: '#fbf5e9' },
+  green: { fg: '#1f9d57', bg: '#e3f4ea', soft: '#f0faf3' },
+  teal:  { fg: '#2d6a6a', bg: '#e0f0f0', soft: '#eef7f7' },
+  red:   { fg: '#d64545', bg: '#fbe6e6', soft: '#fdf1f1' },
+};
 
 // ── Shared card styles ───────────────────────────────────────────────────────
 export const card = StyleSheet.create({

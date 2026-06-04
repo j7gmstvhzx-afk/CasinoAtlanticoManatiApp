@@ -9,15 +9,16 @@ type Props = {
   tabs: TabItem[];
   active: string;
   onChange: (key: string) => void;
+  gutter?: number;
 };
 
-export function SegmentedTabs({ tabs, active, onChange }: Props) {
+export function SegmentedTabs({ tabs, active, onChange, gutter = 16 }: Props) {
   return (
     <View style={styles.wrapper}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
+        contentContainerStyle={[styles.row, { paddingHorizontal: gutter }]}
       >
         {tabs.map(tab => {
           const isActive = tab.key === active;
@@ -46,7 +47,6 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
     gap: 4,
   },
   tab: {

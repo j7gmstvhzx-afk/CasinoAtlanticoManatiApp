@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator, Pressable, ScrollView,
   StyleSheet, Switch, Text as RNText, TextInput, View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,7 +44,7 @@ const CHANGE_COLORS: Record<string, string> = {
 
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
-function ResumeSection({ metric }: { metric: Metric }) {
+function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
   const machines    = useSlotFloorStore(s => s.machines);
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
@@ -77,7 +78,7 @@ function ResumeSection({ metric }: { metric: Metric }) {
   const bankCount = new Set(machines.map(m => m.location.split('-')[0])).size;
 
   return (
-    <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* KPI grid — auto-reflows 4 / 2 / 1 across by screen width */}
       <View style={styles.kpiGrid}>
         <StatCard label="Total Máquinas" value={String(floorStats.total)} icon="grid-outline"      tone="navy"  sub={`${bankCount} bancos en piso`} />
@@ -111,12 +112,12 @@ function ResumeSection({ metric }: { metric: Metric }) {
 
 // ── Section: Bancos ───────────────────────────────────────────────────────────
 
-function BancosSection({ metric, onEdit }: { metric: Metric; onEdit: (m: SlotMachine) => void }) {
+function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number }) {
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
   const groups = getBankGroups();
 
   return (
-    <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       <BankBrowser groups={groups} rankMetric={metric} onEdit={onEdit} />
       <RNText style={styles.footer}>{groups.length} bancos · {groups.reduce((s, g) => s + g.machines.length, 0)} máquinas</RNText>
     </ScrollView>
@@ -125,7 +126,7 @@ function BancosSection({ metric, onEdit }: { metric: Metric; onEdit: (m: SlotMac
 
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
-function FabricantesSection() {
+function FabricantesSection({ gutter }: { gutter: number }) {
   const machines = useSlotFloorStore(s => s.machines);
 
   const rows = useMemo(() => {
@@ -150,7 +151,7 @@ function FabricantesSection() {
   }, [machines]);
 
   return (
-    <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       <View style={card.base}>
         {/* Table header */}
         <View style={[styles.tableRow, styles.tableHeader]}>
@@ -179,7 +180,7 @@ function FabricantesSection() {
 
 // ── Section: Máquinas ─────────────────────────────────────────────────────────
 
-function MaquinasSection({ onEdit }: { onEdit: (m: SlotMachine) => void }) {
+function MaquinasSection({ onEdit, gutter }: { onEdit: (m: SlotMachine) => void; gutter: number }) {
   const getFiltered       = useSlotFloorStore(s => s.getFilteredMachines);
   const setSearch         = useSlotFloorStore(s => s.setExplorerSearch);
   const clearFilters      = useSlotFloorStore(s => s.clearExplorerFilters);
@@ -189,7 +190,7 @@ function MaquinasSection({ onEdit }: { onEdit: (m: SlotMachine) => void }) {
   return (
     <View style={styles.section}>
       {/* Search bar */}
-      <View style={styles.searchBar}>
+      <View style={[styles.searchBar, { marginHorizontal: gutter }]}>
         <Ionicons name="search" size={16} color={C.muted} style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput}
@@ -260,7 +261,7 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
   );
 }
 
-function ApuestasSection() {
+function ApuestasSection({ gutter }: { gutter: number }) {
   const machines = useSlotFloorStore(s => s.machines);
   const [betView, setBetView] = useState<'min' | 'max'>('min');
 
@@ -307,7 +308,7 @@ function ApuestasSection() {
   }, [machines]);
 
   return (
-    <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* Sub-tabs */}
       <View style={styles.betTabRow}>
         <Pressable
@@ -417,7 +418,7 @@ function ApuestasSection() {
 
 // ── Section: Cambios ──────────────────────────────────────────────────────────
 
-function CambiosSection() {
+function CambiosSection({ gutter }: { gutter: number }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
 
   const summary = useMemo(() => {
@@ -427,7 +428,7 @@ function CambiosSection() {
   }, [changes]);
 
   return (
-    <ScrollView contentContainerStyle={styles.sectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* Summary pills */}
       {changes.length > 0 && (
         <View style={styles.changeSummary}>
@@ -497,6 +498,10 @@ export default function DashboardScreen() {
   const profile     = useAuthStore(s => s.profile);
   const signOut     = useAuthStore(s => s.signOut);
 
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+  const gutter    = isDesktop ? 32 : width >= 640 ? 24 : 16;
+
   useEffect(() => { init(); }, [init]);
 
   const showMetricToggle = tab === 'resumen' || tab === 'bancos';
@@ -504,11 +509,16 @@ export default function DashboardScreen() {
   return (
     <View style={styles.root}>
       <SafeAreaView edges={['top']} style={styles.topSafe}>
-        {/* Top bar */}
-        <View style={styles.topBar}>
+        {/* Top bar — responsive: taller + larger logo on desktop */}
+        <View style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 14 : 10 }]}>
           <View style={styles.brandRow}>
-            <View style={styles.logoMark}><RNText style={styles.logoMarkText}>CA</RNText></View>
-            <RNText style={styles.brandText}>Casino Atlántico Manatí</RNText>
+            <View style={[styles.logoMark, isDesktop && styles.logoMarkLg]}>
+              <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
+            </View>
+            <View>
+              <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
+              {isDesktop && <RNText style={styles.brandSub}>Plataforma Operativa de Piso</RNText>}
+            </View>
           </View>
           <View style={styles.topRight}>
             {showMetricToggle && (
@@ -519,7 +529,7 @@ export default function DashboardScreen() {
                   onValueChange={v => setMetric(v ? 'avgWin' : 'avgCoinIn')}
                   trackColor={{ false: C.navy3 + '55', true: C.green + '88' }}
                   thumbColor={metric === 'avgWin' ? C.green : C.navy3}
-                  style={{ transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }] }}
+                  style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                 />
                 <RNText style={[styles.metricLabel, metric === 'avgWin' && styles.metricLabelActive]}>Win</RNText>
               </View>
@@ -532,13 +542,13 @@ export default function DashboardScreen() {
               </View>
             )}
             <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn}>
-              <Ionicons name="log-out-outline" size={20} color={C.navy3} />
+              <Ionicons name="log-out-outline" size={22} color={C.navy3} />
             </Pressable>
           </View>
         </View>
 
         {/* Tabs */}
-        <SegmentedTabs tabs={TABS} active={tab} onChange={setTab} />
+        <SegmentedTabs tabs={TABS} active={tab} onChange={setTab} gutter={gutter} />
       </SafeAreaView>
 
       {!initialized ? (
@@ -548,12 +558,12 @@ export default function DashboardScreen() {
         </View>
       ) : (
         <>
-          {tab === 'resumen'     && <ResumeSection metric={metric} />}
-          {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} />}
-          {tab === 'fabricantes' && <FabricantesSection />}
-          {tab === 'maquinas'    && <MaquinasSection onEdit={setEditMachine} />}
-          {tab === 'apuestas'    && <ApuestasSection />}
-          {tab === 'cambios'     && <CambiosSection />}
+          {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
+          {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
+          {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
+          {tab === 'maquinas'    && <MaquinasSection onEdit={setEditMachine} gutter={gutter} />}
+          {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
+          {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
         </>
       )}
 
@@ -588,6 +598,10 @@ const styles = StyleSheet.create({
   },
   logoMarkText:   { fontSize: 12, fontWeight: '800', color: C.gold, letterSpacing: 0.5 },
   brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
+  brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
+  brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
+  logoMarkLg:     { width: 42, height: 42, borderRadius: 13 },
+  logoMarkTextLg: { fontSize: 15 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
   metricToggle:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
   metricLabel:    { fontSize: 11, fontWeight: '600', color: C.muted },

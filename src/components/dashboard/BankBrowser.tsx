@@ -70,7 +70,8 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
               <Text style={[styles.rankText, { color: ri.color }]}>{ri.label}</Text>
             </View>
           )}
-          <Text style={styles.avgLabel}>Avg: {money(group.avgCoinIn, 0)} CI / {money(group.avgWin, 0)} Win</Text>
+          <Text style={styles.avgLabel}>CI: {money(group.avgCoinIn, 0)} · Win: {money(group.avgWin, 0)}</Text>
+          <Text style={[styles.avgLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
         </View>
       </Pressable>
@@ -78,8 +79,8 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
       {expanded && (
         <View style={styles.machineList}>
           <View style={styles.machineListHeader}>
-            <Text style={styles.mlhText}>Posición · Juego</Text>
-            <Text style={[styles.mlhText, { marginRight: 8 }]}>Avg CI PD / Avg Win PD</Text>
+            <Text style={styles.mlhText}>Posición · Juego · Fabricante</Text>
+            <Text style={[styles.mlhText, { marginRight: 8 }]}>CI PD · Win PD · WWCJPR PD · Max Bet</Text>
           </View>
           {[...group.machines]
             .sort((a, b) => {

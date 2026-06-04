@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator, Pressable, ScrollView,
-  StyleSheet, Switch, Text as RNText, TextInput, View,
+  StyleSheet, Switch, Text as RNText, View,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,7 +24,6 @@ const TABS = [
   { key: 'resumen',      label: 'Resumen' },
   { key: 'bancos',       label: 'Bancos' },
   { key: 'fabricantes',  label: 'Fabricantes' },
-  { key: 'maquinas',     label: 'Máquinas' },
   { key: 'apuestas',     label: 'Apuestas' },
   { key: 'cambios',      label: 'Cambios' },
 ];
@@ -79,12 +78,19 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* KPI grid — auto-reflows 4 / 2 / 1 across by screen width */}
+      {/* KPI grid — auto-reflows across screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas en Piso"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`Distribuidas en ${bankCount} bancos (secciones)`} />
-        <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio de lo apostado por máquina al día (coin-in)" />
-        <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia promedio del casino por máquina al día" />
-        <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Razón de ganancia: Win ÷ Coin-In (cuánto retiene el casino)" />
+        <StatCard label="Total Máquinas"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
+        <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio apostado por máquina al día" />
+        <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia del casino por máquina al día" />
+        <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win ÷ Coin-In · retención del casino" />
+        <StatCard
+          label="Avg WWCJPR PD"
+          value={money(floorStats.avgWin * 0.50, 0)}
+          icon="wallet-outline"
+          tone="red"
+          sub="Win neto después de 50% Comisión de Juegos de Puerto Rico (CJPR)"
+        />
       </View>
 
       {/* Best 5 banks */}
@@ -114,15 +120,93 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
 
 // ── Section: Bancos ───────────────────────────────────────────────────────────
 
+type FilterDef = { id: string; label: string; type: 'coinIn' | 'win'; max: number };
+const BANK_FILTERS: FilterDef[] = [
+  { id: 'ci3000', label: 'CI < $3,000',  type: 'coinIn', max: 3000 },
+  { id: 'ci1500', label: 'CI < $1,500',  type: 'coinIn', max: 1500 },
+  { id: 'ci1000', label: 'CI < $1,000',  type: 'coinIn', max: 1000 },
+  { id: 'win300', label: 'Win < $300',   type: 'win',    max: 300  },
+  { id: 'win200', label: 'Win < $200',   type: 'win',    max: 200  },
+  { id: 'win100', label: 'Win < $100',   type: 'win',    max: 100  },
+];
+
 function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number }) {
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
-  const groups = getBankGroups();
+  const machines      = useSlotFloorStore(s => s.machines);
+  const groups        = getBankGroups();
+
+  const [filterId, setFilterId] = useState<string | null>(null);
+  const activeFilter = BANK_FILTERS.find(f => f.id === filterId) ?? null;
+
+  const filteredMachines = useMemo(() => {
+    if (!activeFilter) return [];
+    return [...machines]
+      .filter(m => {
+        const val = activeFilter.type === 'coinIn' ? (m.avgCoinIn ?? 0) : (m.avgWin ?? 0);
+        return val > 0 && val < activeFilter.max;
+      })
+      .sort((a, b) => {
+        const va = activeFilter.type === 'coinIn' ? (a.avgCoinIn ?? 0) : (a.avgWin ?? 0);
+        const vb = activeFilter.type === 'coinIn' ? (b.avgCoinIn ?? 0) : (b.avgWin ?? 0);
+        return va - vb;
+      });
+  }, [machines, activeFilter]);
 
   return (
-    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      <BankBrowser groups={groups} rankMetric={metric} onEdit={onEdit} />
-      <RNText style={styles.footer}>{groups.length} bancos · {groups.reduce((s, g) => s + g.machines.length, 0)} máquinas</RNText>
-    </ScrollView>
+    <View style={styles.section}>
+      {/* Quick-filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.filterBar, { paddingHorizontal: gutter }]}
+      >
+        <Pressable
+          style={[styles.filterChip, !filterId && styles.filterChipActive]}
+          onPress={() => setFilterId(null)}
+        >
+          <RNText style={[styles.filterChipText, !filterId && styles.filterChipTextActive]}>Todos</RNText>
+        </Pressable>
+        {BANK_FILTERS.map(f => (
+          <Pressable
+            key={f.id}
+            style={[styles.filterChip, filterId === f.id && styles.filterChipActive]}
+            onPress={() => setFilterId(filterId === f.id ? null : f.id)}
+          >
+            <RNText style={[styles.filterChipText, filterId === f.id && styles.filterChipTextActive]}>{f.label}</RNText>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {activeFilter ? (
+        /* Filtered flat machine list */
+        <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.filterResultHeader}>
+            <RNText style={styles.filterResultTitle}>
+              {filteredMachines.length} máquinas con {activeFilter.label}
+            </RNText>
+            <RNText style={styles.filterResultSub}>
+              {activeFilter.type === 'coinIn'
+                ? `Avg Coin-In PD (total apostado por máquina al día) menor a ${money(activeFilter.max, 0)}`
+                : `Avg Win PD (ganancia del casino por máquina al día) menor a ${money(activeFilter.max, 0)}`}
+            </RNText>
+          </View>
+          <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
+            {filteredMachines.map(m => (
+              <MachineRow key={m.id} machine={m} onEdit={onEdit} showBank />
+            ))}
+            {filteredMachines.length === 0 && (
+              <RNText style={styles.empty}>No hay máquinas que cumplan con este filtro</RNText>
+            )}
+          </View>
+        </ScrollView>
+      ) : (
+        /* Normal bank cards view */
+        <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+          <BankBrowser groups={groups} rankMetric={metric} onEdit={onEdit} />
+          <RNText style={styles.footer}>{groups.length} bancos · {groups.reduce((s, g) => s + g.machines.length, 0)} máquinas</RNText>
+        </ScrollView>
+      )}
+    </View>
   );
 }
 
@@ -212,7 +296,7 @@ function FabricantesSection({ gutter }: { gutter: number }) {
                 </View>
               </View>
 
-              {/* Three metric blocks */}
+              {/* Four metric blocks */}
               <View style={styles.mfrMetricGrid}>
                 <View style={styles.mfrMetricItem}>
                   <RNText style={styles.mfrMetricValue}>{money(r.avgCoinIn, 0)}</RNText>
@@ -225,7 +309,12 @@ function FabricantesSection({ gutter }: { gutter: number }) {
                   <RNText style={styles.mfrMetricNote}>Ganancia del casino{'\n'}por máquina al día</RNText>
                 </View>
                 <View style={[styles.mfrMetricItem, styles.mfrMetricBorder]}>
-                  <RNText style={[styles.mfrMetricValue, { color: C.gold }]}>{r.winPct.toFixed(1)}%</RNText>
+                  <RNText style={[styles.mfrMetricValue, { color: C.gold }]}>{money(r.avgWin * 0.50, 0)}</RNText>
+                  <RNText style={styles.mfrMetricLabel}>WWCJPR PD</RNText>
+                  <RNText style={styles.mfrMetricNote}>Win neto después{'\n'}de 50% CJPR</RNText>
+                </View>
+                <View style={[styles.mfrMetricItem, styles.mfrMetricBorder]}>
+                  <RNText style={[styles.mfrMetricValue, { color: C.navy3 }]}>{r.winPct.toFixed(1)}%</RNText>
                   <RNText style={styles.mfrMetricLabel}>Win %</RNText>
                   <RNText style={styles.mfrMetricNote}>Ganancia ÷ Coin-In{'\n'}(retención del casino)</RNText>
                 </View>
@@ -258,47 +347,6 @@ function FabricantesSection({ gutter }: { gutter: number }) {
         Avg Coin-In PD = promedio de lo apostado por máquina en un día · Avg Win PD = ganancia del casino por máquina en un día
       </RNText>
     </ScrollView>
-  );
-}
-
-// ── Section: Máquinas ─────────────────────────────────────────────────────────
-
-function MaquinasSection({ onEdit, gutter }: { onEdit: (m: SlotMachine) => void; gutter: number }) {
-  const getFiltered       = useSlotFloorStore(s => s.getFilteredMachines);
-  const setSearch         = useSlotFloorStore(s => s.setExplorerSearch);
-  const clearFilters      = useSlotFloorStore(s => s.clearExplorerFilters);
-  const explorerSearch    = useSlotFloorStore(s => s.explorerSearch);
-  const filtered          = getFiltered();
-
-  return (
-    <View style={styles.section}>
-      {/* Search bar */}
-      <View style={[styles.searchBar, { marginHorizontal: gutter }]}>
-        <Ionicons name="search" size={16} color={C.muted} style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          value={explorerSearch}
-          onChangeText={setSearch}
-          placeholder="Buscar por ID, juego, banco..."
-          placeholderTextColor={C.muted}
-          autoCorrect={false}
-        />
-        {explorerSearch.length > 0 && (
-          <Pressable onPress={clearFilters} hitSlop={8}>
-            <Ionicons name="close-circle" size={16} color={C.muted} />
-          </Pressable>
-        )}
-      </View>
-      <RNText style={styles.resultCount}>{filtered.length} máquinas</RNText>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {filtered.map(m => (
-          <MachineRow key={m.id} machine={m} onEdit={onEdit} showBank />
-        ))}
-        {filtered.length === 0 && (
-          <RNText style={styles.empty}>No se encontraron máquinas</RNText>
-        )}
-      </ScrollView>
-    </View>
   );
 }
 
@@ -749,7 +797,6 @@ export default function DashboardScreen() {
           {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
           {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
           {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
-          {tab === 'maquinas'    && <MaquinasSection onEdit={setEditMachine} gutter={gutter} />}
           {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
           {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
         </>
@@ -805,6 +852,36 @@ const styles = StyleSheet.create({
   section:        { flex: 1 },
   sectionContent: { padding: 16, gap: 14, paddingBottom: 48 },
 
+  // ── Filter bar (Bancos quick-filter chips) ─────────────────────────────────
+  filterBar: {
+    flexDirection: 'row', gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  filterChip: {
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+  },
+  filterChipActive: {
+    backgroundColor: C.navy, borderColor: C.navy,
+  },
+  filterChipText: {
+    fontSize: 12, fontWeight: '600', color: C.muted,
+  },
+  filterChipTextActive: {
+    color: '#fff',
+  },
+  filterResultHeader: {
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 4,
+  },
+  filterResultTitle: {
+    fontSize: 15, fontWeight: '800', color: C.navy,
+  },
+  filterResultSub: {
+    fontSize: 12, color: C.muted, lineHeight: 17,
+  },
+
   kpiRow:         { flexDirection: 'row', gap: 14 },
   kpiGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   footer:         { fontSize: 12, color: C.faint, textAlign: 'center', marginTop: 8 },
@@ -813,19 +890,6 @@ const styles = StyleSheet.create({
   loading:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText:    { fontSize: 14, color: C.muted },
 
-  searchBar: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    margin:         16,
-    backgroundColor: C.card,
-    borderRadius:   12,
-    paddingHorizontal: 14,
-    paddingVertical:   10,
-    borderWidth:    1,
-    borderColor:    C.border,
-  },
-  searchInput:    { flex: 1, fontSize: 14, color: C.navy },
-  resultCount:    { fontSize: 12, color: C.muted, marginHorizontal: 16, marginTop: -8, marginBottom: 4 },
 
   // ── Apuestas sub-tabs ─────────────────────────────────────────────────────
   betTabRow: {

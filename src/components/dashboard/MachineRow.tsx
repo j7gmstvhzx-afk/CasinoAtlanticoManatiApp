@@ -14,6 +14,8 @@ type Props = {
 export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
   const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
+  // WWCJPR = Win Without Comisión de Juegos de Puerto Rico (Win neto después de 50% CJPR)
+  const wwcjpr = m.avgWin != null ? m.avgWin * 0.50 : null;
 
   return (
     <View style={styles.row}>
@@ -31,7 +33,7 @@ export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
         </View>
       </View>
 
-      {/* Metrics — labeled Avg CI PD / Avg Win PD */}
+      {/* Metrics */}
       <View style={styles.metricsCol}>
         <View style={styles.metricGroup}>
           <Text style={styles.metricTag}>Avg CI PD</Text>
@@ -41,6 +43,12 @@ export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
           <Text style={styles.metricTag}>Avg Win PD</Text>
           <Text style={[styles.metricValue, styles.winValue]}>{money(m.avgWin ?? 0, 0)}</Text>
         </View>
+        {wwcjpr != null && (
+          <View style={styles.metricGroup}>
+            <Text style={styles.metricTag}>WWCJPR PD</Text>
+            <Text style={[styles.metricValue, { color: C.gold }]}>{money(wwcjpr, 0)}</Text>
+          </View>
+        )}
         {maxBet != null && (
           <View style={styles.metricGroup}>
             <Text style={styles.metricTag}>Max Bet</Text>

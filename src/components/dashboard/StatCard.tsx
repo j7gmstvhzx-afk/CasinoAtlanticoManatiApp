@@ -29,12 +29,12 @@ export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
         style={[styles.value, { color: t.fg }]}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.6}
+        minimumFontScale={0.55}
       >
         {value}
       </Text>
 
-      {sub ? <Text style={styles.sub} numberOfLines={2}>{sub}</Text> : null}
+      {sub ? <Text style={styles.sub}>{sub}</Text> : null}
     </View>
   );
 }
@@ -83,10 +83,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.8,
+    lineHeight: 38,
   },
   sub: {
     fontSize: 12,
     color: C.muted,
-    lineHeight: 16,
+    lineHeight: 17,
+    flexShrink: 1,
   },
 });

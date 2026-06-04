@@ -71,13 +71,15 @@ export function BestChangesTab({ onEditMachine }: TabProps) {
 
       {/* Summary */}
       <View style={tabStyles.kpiGrid}>
-        <View style={[tabStyles.kpiCard, { borderLeftWidth: 3, borderLeftColor: GOLD }]}>
-          <Text style={tabStyles.kpiLabel}>Máquinas Cambiadas</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(212,165,116,0.09)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: GOLD, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: '#b8935f' }]}>Máquinas Cambiadas</Text>
           <Text style={tabStyles.kpiValue}>{results.length}</Text>
         </View>
-        <View style={[tabStyles.kpiCard, { borderLeftWidth: 3, borderLeftColor: TEAL }]}>
-          <Text style={tabStyles.kpiLabel}>Coin-In Total</Text>
-          <Text style={[tabStyles.kpiValue, { color: TEAL, fontSize: 16 }]}>{fmt$(topTotal)}</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(42,157,143,0.06)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: TEAL, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: TEAL }]}>Coin-In Total</Text>
+          <Text style={[tabStyles.kpiValue, { color: TEAL }]}>{fmt$(topTotal)}</Text>
         </View>
       </View>
 

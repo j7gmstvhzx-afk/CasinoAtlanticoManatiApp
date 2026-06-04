@@ -43,16 +43,19 @@ export function ComparisonTab({ onEditMachine }: TabProps) {
     <ScrollView style={tabStyles.container} contentContainerStyle={tabStyles.content}>
       {/* Summary */}
       <View style={tabStyles.kpiGrid}>
-        <View style={[tabStyles.kpiCard, { borderTopWidth: 3, borderTopColor: TEAL }]}>
-          <Text style={tabStyles.kpiLabel}>Compras</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(42,157,143,0.06)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: TEAL, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: TEAL }]}>Compras</Text>
           <Text style={[tabStyles.kpiValue, { color: TEAL }]}>{counts.compra}</Text>
         </View>
-        <View style={[tabStyles.kpiCard, { borderTopWidth: 3, borderTopColor: GOLD }]}>
-          <Text style={tabStyles.kpiLabel}>Reubicaciones</Text>
-          <Text style={[tabStyles.kpiValue, { color: GOLD }]}>{counts.reubicacion}</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(212,165,116,0.09)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: GOLD, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: '#b8935f' }]}>Reubicaciones</Text>
+          <Text style={[tabStyles.kpiValue, { color: '#b8935f' }]}>{counts.reubicacion}</Text>
         </View>
-        <View style={[tabStyles.kpiCard, { borderTopWidth: 3, borderTopColor: '#8b5cf6' }]}>
-          <Text style={tabStyles.kpiLabel}>Cambios</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(139,92,246,0.06)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: '#8b5cf6', borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: '#8b5cf6' }]}>Cambios</Text>
           <Text style={[tabStyles.kpiValue, { color: '#8b5cf6' }]}>{counts.cambio_juego}</Text>
         </View>
       </View>

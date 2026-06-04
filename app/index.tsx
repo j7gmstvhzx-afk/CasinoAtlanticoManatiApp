@@ -119,7 +119,7 @@ export default function OperationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8f9fa' },
+  root: { flex: 1, backgroundColor: '#f0f4f8' },
 
   // Header
   header: { backgroundColor: NAVY },
@@ -129,39 +129,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontFamily: "'Playfair Display', Georgia, serif",
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#ffffff',
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   headerSub: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.55)',
-    marginTop: 1,
-    letterSpacing: 0.3,
+    fontSize: 12,
+    color: GOLD,
+    marginTop: 2,
+    letterSpacing: 0.4,
+    fontWeight: '500',
   },
   headerRight:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  machineCount:    { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  machineCountText:{ fontSize: 11, color: 'rgba(255,255,255,0.70)', fontWeight: '500' },
-  roleBadge:       { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  adminBadge:      { backgroundColor: 'rgba(212,165,116,0.25)', borderWidth: 1, borderColor: 'rgba(212,165,116,0.50)' },
+  machineCount:    { backgroundColor: 'rgba(212,165,116,0.20)', borderWidth: 1, borderColor: 'rgba(212,165,116,0.40)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  machineCountText:{ fontSize: 12, color: GOLD, fontWeight: '700' },
+  roleBadge:       { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  adminBadge:      { backgroundColor: 'rgba(212,165,116,0.25)', borderWidth: 1.5, borderColor: GOLD },
   viewerBadge:     { backgroundColor: 'rgba(255,255,255,0.12)' },
-  roleText:        { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  roleText:        { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
   adminText:       { color: GOLD },
   viewerText:      { color: 'rgba(255,255,255,0.75)' },
   logoutBtn:       { padding: 4 },
 
   // Tab bar
-  tabBarWrap: { backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  tabBarWrap: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    shadowColor: '#1a2332',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
   tabBarInner: { paddingHorizontal: 8 },
-  tab: { paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center', position: 'relative' },
+  tab: { paddingHorizontal: 14, paddingVertical: 13, alignItems: 'center', position: 'relative' },
   tabText:       { fontSize: 13, fontWeight: '500', color: '#94a3b8' },
   tabTextActive: { color: NAVY, fontWeight: '700' },
-  tabIndicator:  { position: 'absolute', bottom: 0, left: 8, right: 8, height: 2, backgroundColor: GOLD, borderRadius: 1 },
+  tabIndicator:  { position: 'absolute', bottom: 0, left: 6, right: 6, height: 3, backgroundColor: GOLD, borderRadius: 1.5 },
 
   // Content
   content:     { flex: 1 },

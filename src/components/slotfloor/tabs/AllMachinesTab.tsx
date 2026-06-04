@@ -144,7 +144,7 @@ export function AllMachinesTab({ onEditMachine }: TabProps) {
 }
 
 const styles = StyleSheet.create({
-  searchRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#f8f9fa' },
+  searchRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f0f4f8' },
   searchInput: { flex: 1, fontSize: 14, color: NAVY, padding: 0 },
   filterBar:   { marginBottom: 8 },
   filterRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },

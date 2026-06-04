@@ -38,8 +38,9 @@ export function GameChangesTab({ onEditMachine }: TabProps) {
         {(Object.keys(grouped) as ChangeType[]).map(type => {
           const meta = TYPE_META[type];
           return (
-            <View key={type} style={[tabStyles.kpiCard, { borderTopWidth: 3, borderTopColor: meta.color }]}>
-              <Text style={tabStyles.kpiLabel}>{meta.label}</Text>
+            <View key={type} style={[tabStyles.kpiCard, { backgroundColor: meta.bg, overflow: 'hidden' }]}>
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: meta.color, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+              <Text style={[tabStyles.kpiLabel, { color: meta.color }]}>{meta.label}</Text>
               <Text style={[tabStyles.kpiValue, { color: meta.color }]}>{grouped[type].length}</Text>
             </View>
           );

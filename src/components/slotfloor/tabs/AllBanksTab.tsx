@@ -31,16 +31,19 @@ export function AllBanksTab({ onEditMachine }: TabProps) {
   return (
     <ScrollView style={tabStyles.container} contentContainerStyle={tabStyles.content}>
       <View style={tabStyles.kpiGrid}>
-        <View style={tabStyles.kpiCard}>
-          <Text style={tabStyles.kpiLabel}>Bancos</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(212,165,116,0.09)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: GOLD, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: '#b8935f' }]}>Bancos</Text>
           <Text style={tabStyles.kpiValue}>{banks.length}</Text>
         </View>
-        <View style={tabStyles.kpiCard}>
+        <View style={[tabStyles.kpiCard, { overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: NAVY, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
           <Text style={tabStyles.kpiLabel}>Total Máquinas</Text>
           <Text style={tabStyles.kpiValue}>{machines.length}</Text>
         </View>
-        <View style={tabStyles.kpiCard}>
-          <Text style={tabStyles.kpiLabel}>Activas</Text>
+        <View style={[tabStyles.kpiCard, { backgroundColor: 'rgba(42,157,143,0.06)', overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: TEAL, borderTopLeftRadius: 14, borderTopRightRadius: 14 }} />
+          <Text style={[tabStyles.kpiLabel, { color: TEAL }]}>Activas</Text>
           <Text style={[tabStyles.kpiValue, { color: TEAL }]}>
             {machines.filter(m => m.active).length}
           </Text>

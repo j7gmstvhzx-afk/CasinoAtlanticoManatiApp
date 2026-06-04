@@ -81,21 +81,23 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* KPI grid — auto-reflows 4 / 2 / 1 across by screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en piso`} />
-        <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio diario por máquina" />
-        <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Promedio diario por máquina" />
-        <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win PD / Coin-In PD" />
+        <StatCard label="Total Máquinas en Piso"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`Distribuidas en ${bankCount} bancos (secciones)`} />
+        <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio de lo apostado por máquina al día (coin-in)" />
+        <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia promedio del casino por máquina al día" />
+        <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Razón de ganancia: Win ÷ Coin-In (cuánto retiene el casino)" />
       </View>
 
       {/* Best 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Top 5 Mejores Bancos</RNText></View>
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
         {bestBars.length ? <HBars data={bestBars} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       {/* Worst 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={[card.accent, { backgroundColor: C.red }]} /><RNText style={card.title}>Top 5 Peores Bancos</RNText></View>
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
         {worstBars.length ? <HBars data={worstBars} barColor={C.red} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
@@ -127,9 +129,12 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
 function FabricantesSection({ gutter }: { gutter: number }) {
-  const machines = useSlotFloorStore(s => s.machines);
+  const machines   = useSlotFloorStore(s => s.machines);
+  const floorStats = useSlotFloorStore(s => s.floorStats);
 
   const rows = useMemo(() => {
+    const total     = machines.length;
+    const floorAvgCI = floorStats.avgCoinIn;
     const map = new Map<string, { count: number; totalCoin: number; totalWin: number }>();
     for (const m of machines) {
       const e = map.get(m.manufacturer) ?? { count: 0, totalCoin: 0, totalWin: 0 };
@@ -142,38 +147,116 @@ function FabricantesSection({ gutter }: { gutter: number }) {
       .map(([mfr, e]) => ({
         mfr,
         count:      e.count,
+        sharePct:   total > 0 ? (e.count / total) * 100 : 0,
         avgCoinIn:  e.count ? e.totalCoin / e.count : 0,
         avgWin:     e.count ? e.totalWin  / e.count : 0,
         winPct:     e.totalCoin > 0 ? (e.totalWin / e.totalCoin) * 100 : 0,
+        vsFloor:    floorAvgCI > 0 ? ((e.count ? e.totalCoin / e.count : 0) / floorAvgCI) * 100 : 100,
         color:      mfrColor(mfr, 0),
       }))
       .sort((a, b) => b.avgCoinIn - a.avgCoinIn);
-  }, [machines]);
+  }, [machines, floorStats]);
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      <View style={card.base}>
-        {/* Table header */}
-        <View style={[styles.tableRow, styles.tableHeader]}>
-          <RNText style={[styles.thCell, { flex: 2 }]}>Fabricante</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Máqs</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Avg CI PD</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Avg Win PD</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Win %</RNText>
+
+      {/* Intro context */}
+      <RNText style={styles.sectionIntro}>
+        Comparación de rendimiento por fabricante de máquinas tragamonedas. Cada métrica es un
+        promedio <RNText style={{ fontWeight: '700' }}>por día, por máquina</RNText> calculado a
+        partir de los datos del período actual.
+      </RNText>
+
+      {/* Summary strip */}
+      <View style={styles.mfrSummaryRow}>
+        <View style={styles.mfrSummaryCard}>
+          <RNText style={styles.mfrSummaryNum}>{rows.length}</RNText>
+          <RNText style={styles.mfrSummaryLabel}>Fabricantes{'\n'}en el Piso</RNText>
         </View>
-        {rows.map((r, i) => (
-          <View key={r.mfr} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
-            <View style={[{ flex: 2 }, styles.mfrCell]}>
-              <View style={[styles.mfrDot, { backgroundColor: r.color }]} />
-              <RNText style={styles.tdMfr} numberOfLines={1}>{shortMfr(r.mfr)}</RNText>
-            </View>
-            <RNText style={styles.tdRight}>{r.count}</RNText>
-            <RNText style={styles.tdRight}>{money(r.avgCoinIn, 0)}</RNText>
-            <RNText style={[styles.tdRight, { color: C.green }]}>{money(r.avgWin, 0)}</RNText>
-            <RNText style={styles.tdRight}>{r.winPct.toFixed(1)}%</RNText>
-          </View>
-        ))}
+        <View style={[styles.mfrSummaryCard, { borderLeftColor: rows[0]?.color, borderLeftWidth: 4 }]}>
+          <RNText style={[styles.mfrSummaryNum, { color: rows[0]?.color }]}>{rows[0]?.count ?? 0}</RNText>
+          <RNText style={styles.mfrSummaryLabel}>Máquinas del{'\n'}líder ({rows[0]?.mfr ?? '—'})</RNText>
+        </View>
+        <View style={styles.mfrSummaryCard}>
+          <RNText style={[styles.mfrSummaryNum, { color: C.green }]}>{money(rows[0]?.avgWin ?? 0, 0)}</RNText>
+          <RNText style={styles.mfrSummaryLabel}>Mejor Avg{'\n'}Win PD</RNText>
+        </View>
       </View>
+
+      {/* Per-manufacturer cards */}
+      {rows.map((r, idx) => {
+        const abovePct  = r.vsFloor - 100;
+        const fillWidth = Math.min(Math.max(r.vsFloor, 10), 190) / 190;
+        return (
+          <View key={r.mfr} style={[styles.mfrCard, idx === 0 && styles.mfrCardTop]}>
+
+            {/* Header: color bar + name + count */}
+            <View style={[styles.mfrColorStripe, { backgroundColor: r.color }]} />
+            <View style={styles.mfrCardInner}>
+              <View style={styles.mfrCardHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.mfrCardTitleRow}>
+                    <RNText style={styles.mfrCardName}>{r.mfr}</RNText>
+                    {idx === 0 && (
+                      <View style={styles.mfrTopBadge}>
+                        <RNText style={styles.mfrTopBadgeText}>🏆 Mejor CI PD</RNText>
+                      </View>
+                    )}
+                  </View>
+                  <RNText style={styles.mfrCardSub}>
+                    {r.count} máquinas · {r.sharePct.toFixed(1)}% del piso
+                  </RNText>
+                </View>
+                <View style={styles.mfrRankBadge}>
+                  <RNText style={styles.mfrRankNum}>#{idx + 1}</RNText>
+                </View>
+              </View>
+
+              {/* Three metric blocks */}
+              <View style={styles.mfrMetricGrid}>
+                <View style={styles.mfrMetricItem}>
+                  <RNText style={styles.mfrMetricValue}>{money(r.avgCoinIn, 0)}</RNText>
+                  <RNText style={styles.mfrMetricLabel}>Avg Coin-In PD</RNText>
+                  <RNText style={styles.mfrMetricNote}>Promedio apostado{'\n'}por máquina al día</RNText>
+                </View>
+                <View style={[styles.mfrMetricItem, styles.mfrMetricBorder]}>
+                  <RNText style={[styles.mfrMetricValue, { color: C.green }]}>{money(r.avgWin, 0)}</RNText>
+                  <RNText style={styles.mfrMetricLabel}>Avg Win PD</RNText>
+                  <RNText style={styles.mfrMetricNote}>Ganancia del casino{'\n'}por máquina al día</RNText>
+                </View>
+                <View style={[styles.mfrMetricItem, styles.mfrMetricBorder]}>
+                  <RNText style={[styles.mfrMetricValue, { color: C.gold }]}>{r.winPct.toFixed(1)}%</RNText>
+                  <RNText style={styles.mfrMetricLabel}>Win %</RNText>
+                  <RNText style={styles.mfrMetricNote}>Ganancia ÷ Coin-In{'\n'}(retención del casino)</RNText>
+                </View>
+              </View>
+
+              {/* vs Floor bar */}
+              <View style={styles.mfrBarSection}>
+                <View style={styles.mfrBarLabelRow}>
+                  <RNText style={styles.mfrBarLabel}>Rendimiento vs. promedio del piso</RNText>
+                  <RNText style={[styles.mfrBarDelta, { color: abovePct >= 0 ? C.green : C.red }]}>
+                    {abovePct >= 0 ? '+' : ''}{abovePct.toFixed(0)}%
+                  </RNText>
+                </View>
+                <View style={styles.mfrBarTrack}>
+                  <View style={[styles.mfrBarFill, { width: `${fillWidth * 100}%` as any, backgroundColor: r.color }]} />
+                  <View style={styles.mfrBarMidLine} />
+                </View>
+                <View style={styles.mfrBarEndLabels}>
+                  <RNText style={styles.mfrBarEndLabel}>0%</RNText>
+                  <RNText style={styles.mfrBarEndLabel}>Promedio piso</RNText>
+                  <RNText style={styles.mfrBarEndLabel}>+90%</RNText>
+                </View>
+              </View>
+            </View>
+          </View>
+        );
+      })}
+
+      <RNText style={styles.footer}>
+        Avg Coin-In PD = promedio de lo apostado por máquina en un día · Avg Win PD = ganancia del casino por máquina en un día
+      </RNText>
     </ScrollView>
   );
 }
@@ -951,4 +1034,79 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: C.navy3 },
   emptyBody:  { fontSize: 13, color: C.muted, textAlign: 'center', maxWidth: 280 },
+
+  // ── Resumen context ───────────────────────────────────────────────────────
+  chartContext: {
+    fontSize: 11, color: C.muted, lineHeight: 16,
+    marginTop: -4, marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+
+  // ── Fabricantes redesign ──────────────────────────────────────────────────
+  sectionIntro: {
+    fontSize: 13, color: C.muted, lineHeight: 19,
+    backgroundColor: C.card, borderRadius: 12,
+    padding: 14, borderWidth: 1, borderColor: C.border,
+  },
+  mfrSummaryRow: { flexDirection: 'row', gap: 12 },
+  mfrSummaryCard: {
+    flex: 1, backgroundColor: C.card, borderRadius: 14,
+    padding: 16, gap: 4, borderWidth: 1, borderColor: C.border,
+  },
+  mfrSummaryNum: {
+    fontSize: 30, fontWeight: '900', color: C.navy, letterSpacing: -1,
+  },
+  mfrSummaryLabel: { fontSize: 11, color: C.muted, lineHeight: 15 },
+
+  mfrCard: {
+    backgroundColor: C.card, borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: '#1a2332', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
+  },
+  mfrCardTop: { borderColor: '#f0d090', shadowOpacity: 0.12 },
+  mfrColorStripe: { height: 5 },
+  mfrCardInner: { padding: 16, gap: 14 },
+
+  mfrCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  mfrCardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  mfrCardName: { fontSize: 18, fontWeight: '800', color: C.navy, letterSpacing: -0.3 },
+  mfrCardSub:  { fontSize: 12, color: C.muted, marginTop: 3 },
+  mfrTopBadge: {
+    backgroundColor: '#fdf5e7', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#f0d090',
+  },
+  mfrTopBadgeText: { fontSize: 10, fontWeight: '700', color: '#b8863f' },
+  mfrRankBadge: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#f3f6fa', alignItems: 'center', justifyContent: 'center',
+  },
+  mfrRankNum: { fontSize: 13, fontWeight: '900', color: C.navy3 },
+
+  mfrMetricGrid: {
+    flexDirection: 'row',
+    borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden',
+  },
+  mfrMetricItem: { flex: 1, padding: 14, gap: 3, backgroundColor: '#fafbfc' },
+  mfrMetricBorder: { borderLeftWidth: 1, borderLeftColor: C.border },
+  mfrMetricValue: { fontSize: 22, fontWeight: '900', color: C.navy, letterSpacing: -0.5 },
+  mfrMetricLabel: { fontSize: 10, fontWeight: '800', color: C.muted, letterSpacing: 0.3, textTransform: 'uppercase' },
+  mfrMetricNote:  { fontSize: 10, color: C.faint, lineHeight: 14, marginTop: 2 },
+
+  mfrBarSection: { gap: 6 },
+  mfrBarLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  mfrBarLabel:    { fontSize: 11, color: C.muted, fontWeight: '600' },
+  mfrBarDelta:    { fontSize: 13, fontWeight: '800' },
+  mfrBarTrack: {
+    height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden',
+    position: 'relative',
+  },
+  mfrBarFill:    { height: '100%', borderRadius: 5 },
+  mfrBarMidLine: {
+    position: 'absolute', left: '52.6%', top: 0, bottom: 0,
+    width: 2, backgroundColor: C.navy3 + '66',
+  },
+  mfrBarEndLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  mfrBarEndLabel:  { fontSize: 9, color: C.faint },
 });

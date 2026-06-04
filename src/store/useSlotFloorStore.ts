@@ -355,6 +355,10 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
       if (q && ![m.id, m.game, m.manufacturer, m.location]
         .some(s => s.toLowerCase().includes(q))) return false;
       return true;
+    }).sort((a, b) => {
+      const [bankA, posA] = a.location.split('-').map(Number);
+      const [bankB, posB] = b.location.split('-').map(Number);
+      return bankA !== bankB ? bankA - bankB : posA - posB;
     });
   },
 

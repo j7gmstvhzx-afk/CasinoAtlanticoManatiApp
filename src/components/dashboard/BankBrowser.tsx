@@ -68,11 +68,11 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
 
       {expanded && (
         <View style={styles.machineList}>
-          {group.machines
+          {[...group.machines]
             .sort((a, b) => {
-              const aVal = rankMetric === 'avgWin' ? (a.avgWin ?? 0) : (a.avgCoinIn ?? 0);
-              const bVal = rankMetric === 'avgWin' ? (b.avgWin ?? 0) : (b.avgCoinIn ?? 0);
-              return bVal - aVal;
+              const aPos = parseInt(a.location.split('-')[1] ?? '0', 10);
+              const bPos = parseInt(b.location.split('-')[1] ?? '0', 10);
+              return aPos - bPos;
             })
             .map(m => (
               <MachineRow key={m.id} machine={m} onEdit={onEdit} />

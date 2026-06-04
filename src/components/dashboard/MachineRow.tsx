@@ -74,12 +74,12 @@ const styles = StyleSheet.create({
     width: 46,
   },
   machineId: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: C.navy,
   },
   location: {
-    fontSize: 11,
+    fontSize: 12,
     color: C.muted,
     marginTop: 1,
   },
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   game: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: C.text,
   },
@@ -114,15 +114,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: C.muted,
     fontWeight: '500',
   },
   metricValue: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: C.navy3,
-    minWidth: 52,
+    minWidth: 58,
     textAlign: 'right',
   },
   winValue: {

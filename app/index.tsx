@@ -154,28 +154,30 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
 
   return (
     <View style={styles.section}>
-      {/* Quick-filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.filterBar, { paddingHorizontal: gutter }]}
-      >
-        <Pressable
-          style={[styles.filterChip, !filterId && styles.filterChipActive]}
-          onPress={() => setFilterId(null)}
-        >
-          <RNText style={[styles.filterChipText, !filterId && styles.filterChipTextActive]}>Todos</RNText>
-        </Pressable>
-        {BANK_FILTERS.map(f => (
+      {/* Quick-filter chips — always-visible wrapping row */}
+      <View style={[styles.filterBar, { paddingHorizontal: gutter }]}>
+        <RNText style={styles.filterBarLabel}>Filtrar máquinas:</RNText>
+        <View style={styles.filterChipRow}>
           <Pressable
-            key={f.id}
-            style={[styles.filterChip, filterId === f.id && styles.filterChipActive]}
-            onPress={() => setFilterId(filterId === f.id ? null : f.id)}
+            style={[styles.filterChip, !filterId && styles.filterChipActive]}
+            onPress={() => setFilterId(null)}
           >
-            <RNText style={[styles.filterChipText, filterId === f.id && styles.filterChipTextActive]}>{f.label}</RNText>
+            <RNText style={[styles.filterChipText, !filterId && styles.filterChipTextActive]}>Todos los bancos</RNText>
           </Pressable>
-        ))}
-      </ScrollView>
+          {BANK_FILTERS.map(f => (
+            <Pressable
+              key={f.id}
+              style={[styles.filterChip, filterId === f.id && styles.filterChipActive,
+                f.type === 'win' ? styles.filterChipWin : styles.filterChipCI,
+                filterId === f.id && (f.type === 'win' ? styles.filterChipWinActive : styles.filterChipCIActive),
+              ]}
+              onPress={() => setFilterId(filterId === f.id ? null : f.id)}
+            >
+              <RNText style={[styles.filterChipText, filterId === f.id && styles.filterChipTextActive]}>{f.label}</RNText>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
       {activeFilter ? (
         /* Filtered flat machine list */
@@ -854,13 +856,32 @@ const styles = StyleSheet.create({
 
   // ── Filter bar (Bancos quick-filter chips) ─────────────────────────────────
   filterBar: {
-    flexDirection: 'row', gap: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    gap: 8,
     borderBottomWidth: 1, borderBottomColor: C.border,
+    backgroundColor: C.card,
+  },
+  filterBarLabel: {
+    fontSize: 11, fontWeight: '700', color: C.muted, letterSpacing: 0.3,
+  },
+  filterChipRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
   },
   filterChip: {
     borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
-    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.page, borderWidth: 1, borderColor: C.border,
+  },
+  filterChipCI: {
+    borderColor: C.navy3 + '55',
+  },
+  filterChipCIActive: {
+    backgroundColor: C.navy, borderColor: C.navy,
+  },
+  filterChipWin: {
+    borderColor: C.green + '55',
+  },
+  filterChipWinActive: {
+    backgroundColor: C.green, borderColor: C.green,
   },
   filterChipActive: {
     backgroundColor: C.navy, borderColor: C.navy,

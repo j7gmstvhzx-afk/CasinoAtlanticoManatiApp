@@ -14,18 +14,19 @@ type Props = {
 export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
   const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
-  // WWCJPR = Win Without Comisión de Juegos de Puerto Rico (Win neto después de 50% CJPR)
+  // WWCJPR = Win Without Comisión de Juegos de Puerto Rico (Win después de deducir 50% CJPR)
   const wwcjpr = m.avgWin != null ? m.avgWin * 0.50 : null;
 
   return (
     <View style={styles.row}>
-      {/* ID + full location (always 09-01 format) */}
+
+      {/* ID + location */}
       <View style={styles.idCol}>
         <Text style={styles.machineId}>{m.id}</Text>
         <Text style={styles.location}>{m.location}</Text>
       </View>
 
-      {/* Game + manufacturer pill */}
+      {/* Game name + manufacturer pill */}
       <View style={styles.gameCol}>
         <Text style={styles.game} numberOfLines={2}>{m.game}</Text>
         <View style={[styles.mfrPill, { backgroundColor: mfrBg + '18', borderColor: mfrBg + '55' }]}>
@@ -33,28 +34,34 @@ export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
         </View>
       </View>
 
-      {/* Metrics */}
-      <View style={styles.metricsCol}>
-        <View style={styles.metricGroup}>
-          <Text style={styles.metricTag}>Avg CI PD</Text>
-          <Text style={styles.metricValue}>{money(m.avgCoinIn ?? 0, 0)}</Text>
-        </View>
-        <View style={styles.metricGroup}>
-          <Text style={styles.metricTag}>Avg Win PD</Text>
-          <Text style={[styles.metricValue, styles.winValue]}>{money(m.avgWin ?? 0, 0)}</Text>
-        </View>
-        {wwcjpr != null && (
-          <View style={styles.metricGroup}>
-            <Text style={styles.metricTag}>WWCJPR PD</Text>
-            <Text style={[styles.metricValue, { color: C.gold }]}>{money(wwcjpr, 0)}</Text>
+      {/* Compact 2×2 metric grid */}
+      <View style={styles.metricsGrid}>
+        {/* Row 1: Coin-In + Win */}
+        <View style={styles.metricPair}>
+          <View style={styles.metricCell}>
+            <Text style={styles.metricTag}>Avg CI PD</Text>
+            <Text style={styles.metricValue}>{money(m.avgCoinIn ?? 0, 0)}</Text>
           </View>
-        )}
-        {maxBet != null && (
-          <View style={styles.metricGroup}>
-            <Text style={styles.metricTag}>Max Bet</Text>
-            <Text style={[styles.metricValue, { color: C.navy3 }]}>{money(maxBet, 2)}</Text>
+          <View style={styles.metricCell}>
+            <Text style={styles.metricTag}>Avg Win PD</Text>
+            <Text style={[styles.metricValue, { color: C.green }]}>{money(m.avgWin ?? 0, 0)}</Text>
           </View>
-        )}
+        </View>
+        {/* Row 2: WWCJPR + Max Bet */}
+        <View style={styles.metricPair}>
+          {wwcjpr != null ? (
+            <View style={styles.metricCell}>
+              <Text style={styles.metricTag}>WWCJPR PD</Text>
+              <Text style={[styles.metricValue, { color: C.gold }]}>{money(wwcjpr, 0)}</Text>
+            </View>
+          ) : <View style={styles.metricCell} />}
+          {maxBet != null ? (
+            <View style={styles.metricCell}>
+              <Text style={styles.metricTag}>Max Bet</Text>
+              <Text style={[styles.metricValue, { color: C.navy3 }]}>{money(maxBet, 2)}</Text>
+            </View>
+          ) : <View style={styles.metricCell} />}
+        </View>
       </View>
 
       {/* Edit button */}
@@ -71,7 +78,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
@@ -116,12 +123,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  metricsCol: {
-    gap: 4,
+
+  // 2×2 compact metric grid
+  metricsGrid: {
+    gap: 6,
     alignItems: 'flex-end',
   },
-  metricGroup: {
+  metricPair: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  metricCell: {
     alignItems: 'flex-end',
+    minWidth: 68,
   },
   metricTag: {
     fontSize: 9,
@@ -136,9 +150,7 @@ const styles = StyleSheet.create({
     color: C.navy3,
     letterSpacing: -0.2,
   },
-  winValue: {
-    color: C.green,
-  },
+
   editBtn: {
     width: 32,
     height: 32,

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, card, money } from './shared';
+import { C, money } from './shared';
 import { MachineRow } from './MachineRow';
 import type { BankGroup } from '@/store/useSlotFloorStore';
 import type { SlotMachine } from '@/types/domain';
@@ -13,11 +13,12 @@ type Props = {
   onEdit: (m: SlotMachine) => void;
 };
 
-type RankInfo = { label: string; color: string; bg: string };
+type RankInfo = { label: string; color: string; border: string };
 
 function rankInfo(rank: number, total: number): RankInfo | null {
-  if (rank <= 3)       return { label: `#${rank} Mejor`,  color: C.gold,  bg: '#f6ecdd' };
-  if (rank >= total - 2) return { label: `#${total - rank + 1} Peor`, color: '#e53e3e', bg: '#fff5f5' };
+  if (rank === 1) return { label: '🥇 #1', color: '#b8863f', border: '#f0d090' };
+  if (rank <= 3)  return { label: `#${rank} Mejor`, color: '#b8863f', border: '#f0d090' };
+  if (rank >= total - 2) return { label: `#${total - rank + 1} Peor`, color: '#c0392b', border: '#f5c6c6' };
   return null;
 }
 
@@ -33,41 +34,53 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
   const [expanded, setExpanded] = useState(false);
   const ri   = rankInfo(rank, total);
   const bank = group.bank.padStart(2, '0');
+  const { width } = useWindowDimensions();
+  const isWide = width >= 640;
+
+  // Show total Coin-In PD and total Win PD for the whole bank
+  const totalCILabel = isWide ? 'Total Coin-In PD del Banco' : 'Total CI PD';
+  const totalWinLabel = isWide ? 'Total Win PD del Banco' : 'Total Win PD';
 
   return (
-    <View style={styles.card}>
-      <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)}>
-        {/* Left: bank + count */}
-        <View style={styles.bankLabel}>
-          <Text style={styles.bankNum}>Banco {bank}</Text>
+    <View style={[styles.card, ri && rank <= 3 && styles.cardTop]}>
+      <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)} android_ripple={{ color: '#f0f0f0' }}>
+        {/* Left: bank number badge */}
+        <View style={[styles.bankBadge, rank <= 3 && styles.bankBadgeTop]}>
+          <Text style={[styles.bankNum, rank <= 3 && styles.bankNumTop]}>Banco</Text>
+          <Text style={[styles.bankNumLg, rank <= 3 && styles.bankNumTop]}>{bank}</Text>
           <Text style={styles.bankCount}>{group.machines.length} máqs</Text>
         </View>
 
-        {/* Center: metrics */}
-        <View style={styles.metrics}>
-          <Text style={styles.metricPrimary}>{money(group.avgCoinIn, 0)}</Text>
-          <Text style={styles.metricSub}>Coin-In prom.</Text>
-          <Text style={styles.metricWin}>{money(group.avgWin, 0)}</Text>
-          <Text style={styles.metricSub}>Win prom.</Text>
+        {/* Center: Total Coin-In PD + Total Win PD */}
+        <View style={styles.metricsBlock}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricValue}>{money(group.totalCoinIn, 0)}</Text>
+            <Text style={styles.metricLabel}>{totalCILabel}</Text>
+          </View>
+          <View style={[styles.metricItem, styles.metricDivider]}>
+            <Text style={[styles.metricValue, styles.metricValueWin]}>{money(group.totalWin, 0)}</Text>
+            <Text style={styles.metricLabel}>{totalWinLabel}</Text>
+          </View>
         </View>
 
-        {/* Right: rank chip + chevron */}
+        {/* Right: rank chip + avg per machine + chevron */}
         <View style={styles.rightCol}>
           {ri && (
-            <View style={[styles.rankChip, { backgroundColor: ri.bg }]}>
+            <View style={[styles.rankChip, { borderColor: ri.border }]}>
               <Text style={[styles.rankText, { color: ri.color }]}>{ri.label}</Text>
             </View>
           )}
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={C.muted}
-          />
+          <Text style={styles.avgLabel}>Avg: {money(group.avgCoinIn, 0)} CI / {money(group.avgWin, 0)} Win</Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
         </View>
       </Pressable>
 
       {expanded && (
         <View style={styles.machineList}>
+          <View style={styles.machineListHeader}>
+            <Text style={styles.mlhText}>Posición · Juego</Text>
+            <Text style={[styles.mlhText, { marginRight: 8 }]}>Avg CI PD / Avg Win PD</Text>
+          </View>
           {[...group.machines]
             .sort((a, b) => {
               const aPos = parseInt(a.location.split('-')[1] ?? '0', 10);
@@ -75,7 +88,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
               return aPos - bPos;
             })
             .map(m => (
-              <MachineRow key={m.id} machine={m} onEdit={onEdit} />
+              <MachineRow key={m.id} machine={m} onEdit={onEdit} showBank />
             ))}
         </View>
       )}
@@ -85,17 +98,12 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
 
 export function BankBrowser({ groups, rankMetric, onEdit }: Props) {
   const sorted = [...groups].sort((a, b) =>
-    rankMetric === 'avgWin'
-      ? b.avgWin    - a.avgWin
-      : b.avgCoinIn - a.avgCoinIn
+    rankMetric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
   );
-
-  // Map bank → rank by selected metric
   const rankMap = new Map(sorted.map((g, i) => [g.bank, i + 1]));
 
-  // Display order is always 09→52
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 12 }}>
       {groups.map(group => (
         <BankCard
           key={group.bank}
@@ -113,67 +121,128 @@ export function BankBrowser({ groups, rankMetric, onEdit }: Props) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: C.card,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.border,
     shadowColor: '#1a2332',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
     elevation: 2,
+  },
+  cardTop: {
+    borderColor: '#f0d090',
+    shadowOpacity: 0.12,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 14,
   },
-  bankLabel: {
-    width: 72,
+  bankBadge: {
+    width: 62,
+    alignItems: 'center',
+    backgroundColor: '#f3f6fa',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    gap: 1,
+  },
+  bankBadgeTop: {
+    backgroundColor: '#fdf5e7',
   },
   bankNum: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 9,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  bankNumTop: {
+    color: '#b8863f',
+  },
+  bankNumLg: {
+    fontSize: 22,
+    fontWeight: '900',
     color: C.navy,
+    letterSpacing: -0.5,
   },
   bankCount: {
-    fontSize: 11,
-    color: C.muted,
-    marginTop: 1,
-  },
-  metrics: {
-    flex: 1,
-  },
-  metricPrimary: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.navy3,
-  },
-  metricSub: {
     fontSize: 10,
     color: C.muted,
-    marginBottom: 2,
+    marginTop: 2,
   },
-  metricWin: {
-    fontSize: 13,
-    fontWeight: '700',
+  metricsBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 0,
+  },
+  metricItem: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+  metricDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: C.border,
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.navy,
+    letterSpacing: -0.3,
+  },
+  metricValueWin: {
     color: C.green,
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: C.muted,
+    marginTop: 2,
+    fontWeight: '500',
   },
   rightCol: {
     alignItems: 'flex-end',
-    gap: 6,
+    gap: 5,
+    minWidth: 72,
   },
   rankChip: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderWidth: 1,
+    backgroundColor: '#fffdf7',
   },
   rankText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
+  avgLabel: {
+    fontSize: 10,
+    color: C.muted,
+    textAlign: 'right',
+  },
   machineList: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e8ecf0',
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  machineListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  mlhText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
 });

@@ -81,10 +81,10 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* KPI grid — auto-reflows 4 / 2 / 1 across by screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas" value={String(floorStats.total)} icon="grid-outline"      tone="navy"  sub={`${bankCount} bancos en piso`} />
-        <StatCard label="Avg Coin-In"    value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio por máquina" />
-        <StatCard label="Avg Win"        value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Promedio por máquina" />
-        <StatCard label="Win %"          value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win / Coin-In" />
+        <StatCard label="Total Máquinas"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en piso`} />
+        <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio diario por máquina" />
+        <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Promedio diario por máquina" />
+        <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win PD / Coin-In PD" />
       </View>
 
       {/* Best 5 banks */}
@@ -157,8 +157,8 @@ function FabricantesSection({ gutter }: { gutter: number }) {
         <View style={[styles.tableRow, styles.tableHeader]}>
           <RNText style={[styles.thCell, { flex: 2 }]}>Fabricante</RNText>
           <RNText style={[styles.thCell, styles.thRight]}>Máqs</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Avg Coin-In</RNText>
-          <RNText style={[styles.thCell, styles.thRight]}>Avg Win</RNText>
+          <RNText style={[styles.thCell, styles.thRight]}>Avg CI PD</RNText>
+          <RNText style={[styles.thCell, styles.thRight]}>Avg Win PD</RNText>
           <RNText style={[styles.thCell, styles.thRight]}>Win %</RNText>
         </View>
         {rows.map((r, i) => (
@@ -264,152 +264,257 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
 function ApuestasSection({ gutter }: { gutter: number }) {
   const machines = useSlotFloorStore(s => s.machines);
   const [betView, setBetView] = useState<'min' | 'max'>('min');
+  const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
 
   const minStats = useMemo(() => {
     const all = machines.map(m => m.minBet).filter(b => typeof b === 'number' && b > 0) as number[];
     if (!all.length) return null;
-    const lowest  = Math.min(...all);
+    const lowest = Math.min(...all);
     const highest = Math.max(...all);
-    const avg     = all.reduce((s, v) => s + v, 0) / all.length;
+    const avg = all.reduce((s, v) => s + v, 0) / all.length;
     const acc  = machines.filter(m => (m.minBet ?? 0) <= 0.40 && (m.minBet ?? 0) > 0);
     const high = machines.filter(m => (m.minBet ?? 0) >= 0.50);
     const accBets  = acc.map(m => m.minBet as number);
     const highBets = high.map(m => m.minBet as number);
     return {
       lowest, highest, avg,
-      accCount: acc.length, accLow: Math.min(...accBets), accHigh: Math.max(...accBets), accAvg: accBets.reduce((s, v) => s + v, 0) / (accBets.length || 1),
-      highCount: high.length, highLow: Math.min(...highBets), highHigh: Math.max(...highBets), highAvg: highBets.reduce((s, v) => s + v, 0) / (highBets.length || 1),
+      accCount: acc.length, accMachines: acc,
+      accLow: accBets.length ? Math.min(...accBets) : 0,
+      accHigh: accBets.length ? Math.max(...accBets) : 0,
+      accAvg: accBets.length ? accBets.reduce((s, v) => s + v, 0) / accBets.length : 0,
+      highCount: high.length, highMachines: high,
+      highLow: highBets.length ? Math.min(...highBets) : 0,
+      highHigh: highBets.length ? Math.max(...highBets) : 0,
+      highAvg: highBets.length ? highBets.reduce((s, v) => s + v, 0) / highBets.length : 0,
     };
   }, [machines]);
 
   const maxStats = useMemo(() => {
-    const bets = machines.map(m => Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0)).filter(b => b > 0);
+    const withBet = machines.filter(m => m.maxBet01 || m.maxBet02 || m.maxBet05 || m.maxBet10);
+    const bets = withBet.map(m => Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0));
     if (!bets.length) return null;
     const floorMax = Math.max(...bets);
     const avg = bets.reduce((s, v) => s + v, 0) / bets.length;
     const multiCount  = machines.filter(m => m.multiDeno).length;
     const singleCount = machines.filter(m => !m.multiDeno).length;
-    const denoMap = new Map<string, number>();
-    for (const m of machines) denoMap.set(m.denomination, (denoMap.get(m.denomination) ?? 0) + 1);
+    const denoMap = new Map<string, SlotMachine[]>();
+    for (const m of machines) {
+      const d = m.denomination;
+      denoMap.set(d, [...(denoMap.get(d) ?? []), m]);
+    }
     const denoBuckets = Array.from(denoMap.entries())
       .sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
-    return { floorMax, avg, multiCount, singleCount, denoBuckets };
+    return { floorMax, avg, multiCount, singleCount, denoBuckets, topBets: withBet.map((m, i) => ({ m, bet: bets[i] })).sort((a, b) => b.bet - a.bet).slice(0, 20) };
   }, [machines]);
 
-  const topBetBars: HBarItem[] = useMemo(() => {
-    return [...machines]
-      .filter(m => m.maxBet01 != null || m.maxBet05 != null || m.maxBet02 != null || m.maxBet10 != null)
-      .map(m => {
-        const v = Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0);
-        return { key: m.id, label: `${m.id} · ${m.location}`, value: v, display: money(v, 2), color: C.navy };
-      })
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 20);
-  }, [machines]);
+  const topBetBars: HBarItem[] = useMemo(() =>
+    (maxStats?.topBets ?? []).map(({ m, bet }) => ({
+      key: m.id, label: `${m.id} · ${m.location}`, value: bet, display: money(bet, 2), color: C.navy,
+    })), [maxStats]);
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* Sub-tabs */}
-      <View style={styles.betTabRow}>
+      {/* Bold view switcher */}
+      <View style={styles.betSwitcher}>
         <Pressable
-          style={[styles.betTab, betView === 'min' && styles.betTabActive]}
+          style={[styles.betSwitchBtn, betView === 'min' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('min')}
         >
-          <RNText style={[styles.betTabText, betView === 'min' && styles.betTabTextActive]}>Apuesta Mínima</RNText>
+          <RNText style={[styles.betSwitchLabel, betView === 'min' && styles.betSwitchLabelActive]}>MIN BET</RNText>
+          <RNText style={[styles.betSwitchSub, betView === 'min' && { color: '#fff' }]}>Apuesta Mínima</RNText>
         </Pressable>
         <Pressable
-          style={[styles.betTab, betView === 'max' && styles.betTabActive]}
+          style={[styles.betSwitchBtn, betView === 'max' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('max')}
         >
-          <RNText style={[styles.betTabText, betView === 'max' && styles.betTabTextActive]}>Apuesta Máxima</RNText>
+          <RNText style={[styles.betSwitchLabel, betView === 'max' && styles.betSwitchLabelActive]}>MAX BET</RNText>
+          <RNText style={[styles.betSwitchSub, betView === 'max' && { color: '#fff' }]}>Apuesta Máxima</RNText>
         </Pressable>
       </View>
 
-      {betView === 'min' && (
+      {betView === 'min' && minStats && (
         <>
-          <RNText style={styles.betHeading}>Apuestas Mínimas del Piso</RNText>
-          <RNText style={styles.betSubheading}>Resumen de las apuestas mínimas disponibles en el piso. Muestra el rango de Min Bet entre todas las máquinas.</RNText>
+          {/* Hero stats row */}
+          <View style={styles.betHeroRow}>
+            <View style={[styles.betHeroCard, { backgroundColor: '#eef7f7', borderColor: '#2d6a6a33' }]}>
+              <RNText style={styles.betHeroLabel}>MÁS BAJO</RNText>
+              <RNText style={[styles.betHeroVal, { color: '#2d6a6a' }]}>{money(minStats.lowest, 2)}</RNText>
+            </View>
+            <View style={[styles.betHeroCard, styles.betHeroCardCenter]}>
+              <RNText style={styles.betHeroLabel}>PROMEDIO</RNText>
+              <RNText style={[styles.betHeroVal, { color: C.navy }]}>{money(minStats.avg, 2)}</RNText>
+            </View>
+            <View style={[styles.betHeroCard, { backgroundColor: '#fdf5e7', borderColor: '#b8863f33' }]}>
+              <RNText style={styles.betHeroLabel}>MÁS ALTO</RNText>
+              <RNText style={[styles.betHeroVal, { color: '#b8863f' }]}>{money(minStats.highest, 2)}</RNText>
+            </View>
+          </View>
 
-          {minStats ? (
-            <>
-              {/* KPI row 1 */}
-              <View style={styles.kpiRow}>
-                <BetKpiCard label="Min Bet Más Bajo"   value={money(minStats.lowest, 2)}   teal />
-                <BetKpiCard label="Min Bet Promedio"   value={money(minStats.avg, 2)}       teal />
-              </View>
-              <View style={styles.kpiRow}>
-                <BetKpiCard label="Min Bet Más Alto"   value={money(minStats.highest, 2)} />
-                <BetKpiCard label="Rango de Min Bet"   value={`${money(minStats.lowest, 2)} – ${money(minStats.highest, 2)}`} sub="Desde Multi Line hasta High Bet" />
-              </View>
+          {/* Rango visual */}
+          <View style={styles.betRangeBar}>
+            <RNText style={styles.betRangeLabel}>{money(minStats.lowest, 2)}</RNText>
+            <View style={styles.betRangeTrack}>
+              <View style={[styles.betRangeFill, { width: `${(minStats.avg / minStats.highest) * 100}%` as any }]} />
+              <View style={styles.betRangeMarker} />
+            </View>
+            <RNText style={styles.betRangeLabel}>{money(minStats.highest, 2)}</RNText>
+          </View>
 
-              {/* Bet segments */}
-              {minStats.accCount > 0 && (
-                <BetSegCard
-                  title={`Accessible Bet (Multi Line · ≤ $0.40)`}
-                  count={minStats.accCount}
-                  low={minStats.accLow}
-                  high={minStats.accHigh}
-                  avg={minStats.accAvg}
-                  teal
-                />
-              )}
-              {minStats.highCount > 0 && (
-                <BetSegCard
-                  title={`High Bet ($0.50–$1.00)`}
-                  count={minStats.highCount}
-                  low={minStats.highLow}
-                  high={minStats.highHigh}
-                  avg={minStats.highAvg}
-                />
-              )}
-            </>
-          ) : (
-            <RNText style={styles.empty}>Sin datos de apuestas mínimas</RNText>
+          {/* Segmentos interactivos */}
+          <Pressable
+            style={[styles.betSegPress, { borderLeftColor: '#2d6a6a' }]}
+            onPress={() => setExpandedDeno(expandedDeno === 'acc' ? null : 'acc')}
+          >
+            <View style={styles.betSegPressHeader}>
+              <View>
+                <RNText style={[styles.betSegPressTitle, { color: '#2d6a6a' }]}>Accessible Bet · ≤ $0.40</RNText>
+                <RNText style={styles.betSegPressSub}>Multi Line y apuestas accesibles</RNText>
+              </View>
+              <View style={styles.betSegPressRight}>
+                <RNText style={[styles.betSegCount, { color: '#2d6a6a' }]}>{minStats.accCount}</RNText>
+                <RNText style={styles.betSegCountLabel}>máquinas</RNText>
+                <Ionicons name={expandedDeno === 'acc' ? 'chevron-up' : 'chevron-down'} size={16} color="#2d6a6a" />
+              </View>
+            </View>
+            <View style={styles.betSegStats}>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.accLow, 2)}</RNText><RNText style={styles.betStatLab}>Mínimo</RNText></View>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.accAvg, 2)}</RNText><RNText style={styles.betStatLab}>Promedio</RNText></View>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.accHigh, 2)}</RNText><RNText style={styles.betStatLab}>Máximo</RNText></View>
+            </View>
+          </Pressable>
+          {expandedDeno === 'acc' && (
+            <View style={styles.betMachineList}>
+              {minStats.accMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
+                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
+                  <RNText style={styles.betMcId}>{m.id}</RNText>
+                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
+                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
+                  <RNText style={[styles.betMcVal, { color: '#2d6a6a' }]}>{money(m.minBet, 2)}</RNText>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Pressable
+            style={[styles.betSegPress, { borderLeftColor: C.gold }]}
+            onPress={() => setExpandedDeno(expandedDeno === 'high' ? null : 'high')}
+          >
+            <View style={styles.betSegPressHeader}>
+              <View>
+                <RNText style={[styles.betSegPressTitle, { color: C.gold }]}>High Bet · $0.50 – $1.00</RNText>
+                <RNText style={styles.betSegPressSub}>Easy Bet y apuestas premium</RNText>
+              </View>
+              <View style={styles.betSegPressRight}>
+                <RNText style={[styles.betSegCount, { color: C.gold }]}>{minStats.highCount}</RNText>
+                <RNText style={styles.betSegCountLabel}>máquinas</RNText>
+                <Ionicons name={expandedDeno === 'high' ? 'chevron-up' : 'chevron-down'} size={16} color={C.gold} />
+              </View>
+            </View>
+            <View style={styles.betSegStats}>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.highLow, 2)}</RNText><RNText style={styles.betStatLab}>Mínimo</RNText></View>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.highAvg, 2)}</RNText><RNText style={styles.betStatLab}>Promedio</RNText></View>
+              <View style={styles.betStatItem}><RNText style={styles.betStatVal}>{money(minStats.highHigh, 2)}</RNText><RNText style={styles.betStatLab}>Máximo</RNText></View>
+            </View>
+          </Pressable>
+          {expandedDeno === 'high' && (
+            <View style={styles.betMachineList}>
+              {minStats.highMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
+                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
+                  <RNText style={styles.betMcId}>{m.id}</RNText>
+                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
+                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
+                  <RNText style={[styles.betMcVal, { color: C.gold }]}>{money(m.minBet, 2)}</RNText>
+                </View>
+              ))}
+            </View>
           )}
         </>
       )}
 
-      {betView === 'max' && (
+      {betView === 'max' && maxStats && (
         <>
-          {maxStats ? (
-            <>
-              {/* Max Bet KPIs */}
-              <View style={styles.kpiRow}>
-                <BetKpiCard label="Floor Max Bet"        value={money(maxStats.floorMax, 2)} sub="Highest bet available" />
-                <BetKpiCard label="Average Max Bet"      value={money(maxStats.avg, 2)}      sub="Across all configurations" teal />
-              </View>
-              <View style={styles.kpiRow}>
-                <BetKpiCard label="Multi-Deno Machines"  value={String(maxStats.multiCount)}  sub="Offer multiple denomination options" teal />
-                <BetKpiCard label="Single Deno Machines" value={String(maxStats.singleCount)} sub="Fixed denomination only" />
-              </View>
+          {/* Hero row */}
+          <View style={styles.betHeroRow}>
+            <View style={[styles.betHeroCard, { flex: 1.5, backgroundColor: '#f0f4fb', borderColor: C.navy + '33' }]}>
+              <RNText style={styles.betHeroLabel}>FLOOR MAX BET</RNText>
+              <RNText style={[styles.betHeroVal, { color: C.navy, fontSize: 36 }]}>{money(maxStats.floorMax, 2)}</RNText>
+              <RNText style={styles.betHeroSub}>Apuesta más alta disponible</RNText>
+            </View>
+            <View style={[styles.betHeroCard, { backgroundColor: '#eef7f7', borderColor: '#2d6a6a33' }]}>
+              <RNText style={styles.betHeroLabel}>PROMEDIO</RNText>
+              <RNText style={[styles.betHeroVal, { color: '#2d6a6a' }]}>{money(maxStats.avg, 2)}</RNText>
+              <RNText style={styles.betHeroSub}>Por máquina</RNText>
+            </View>
+          </View>
 
-              {/* Denominaciones Base */}
-              <View style={card.base}>
-                <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Denominaciones Base del Piso</RNText></View>
-                <RNText style={styles.betSubheading}>Las denominaciones físicas de las máquinas. Las Multi-Denominación ofrecen opciones adicionales.</RNText>
-                <View style={styles.denoGrid}>
-                  {maxStats.denoBuckets.map(([deno, count]) => (
-                    <View key={deno} style={[styles.denoCard, { borderColor: (DENO_COLORS[deno] ?? C.navy3) + '44' }]}>
-                      <View style={[styles.denoBadge, { backgroundColor: DENO_COLORS[deno] ?? C.navy3 }]}>
-                        <RNText style={styles.denoBadgeText}>{DENO_LABELS[deno] ?? deno}</RNText>
-                      </View>
-                      <RNText style={styles.denoLabel}>Denominación Base</RNText>
-                      <RNText style={styles.denoCount}>{count}</RNText>
-                      <RNText style={styles.denoSub}>máquinas con denominación base de {DENO_LABELS[deno] ?? deno}</RNText>
-                    </View>
-                  ))}
+          {/* Multi/Single deno */}
+          <View style={styles.kpiRow}>
+            <View style={styles.denoStatCard}>
+              <RNText style={styles.denoStatNum}>{maxStats.multiCount}</RNText>
+              <RNText style={styles.denoStatLabel}>Multi-Denominación</RNText>
+              <RNText style={styles.denoStatSub}>Ofrecen múltiples opciones de denom.</RNText>
+            </View>
+            <View style={styles.denoStatCard}>
+              <RNText style={styles.denoStatNum}>{maxStats.singleCount}</RNText>
+              <RNText style={styles.denoStatLabel}>Denominación Fija</RNText>
+              <RNText style={styles.denoStatSub}>Solo una denominación disponible</RNText>
+            </View>
+          </View>
+
+          {/* Denominaciones — interactive tiles */}
+          <View style={styles.denoTileRow}>
+            {maxStats.denoBuckets.map(([deno, mList]) => (
+              <Pressable
+                key={deno}
+                style={[styles.denoTile, { borderColor: (DENO_COLORS[deno] ?? C.navy3) + '55' },
+                  expandedDeno === deno && { borderColor: DENO_COLORS[deno] ?? C.navy3, borderWidth: 2 }]}
+                onPress={() => setExpandedDeno(expandedDeno === deno ? null : deno)}
+              >
+                <View style={[styles.denoTileBadge, { backgroundColor: DENO_COLORS[deno] ?? C.navy3 }]}>
+                  <RNText style={styles.denoTileBadgeText}>{DENO_LABELS[deno] ?? deno}</RNText>
                 </View>
-              </View>
+                <RNText style={styles.denoTileCount}>{mList.length}</RNText>
+                <RNText style={styles.denoTileSub}>máquinas</RNText>
+                <Ionicons
+                  name={expandedDeno === deno ? 'chevron-up' : 'chevron-down'}
+                  size={13} color={C.muted} style={{ marginTop: 4 }}
+                />
+              </Pressable>
+            ))}
+          </View>
 
-              {/* Top 20 Max Bet */}
-              <View style={card.base}>
-                <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Top 20 Apuesta Máxima</RNText></View>
-                {topBetBars.length ? <HBars data={topBetBars} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+          {/* Expanded deno machine list */}
+          {expandedDeno && maxStats.denoBuckets.find(([d]) => d === expandedDeno) && (
+            <View style={styles.betMachineList}>
+              <View style={styles.betMachineListHeader}>
+                <RNText style={styles.betMcHeaderText}>ID · Ubicación · Juego</RNText>
+                <RNText style={styles.betMcHeaderText}>Max Bet</RNText>
               </View>
-            </>
-          ) : (
-            <RNText style={styles.empty}>Sin datos de apuestas máximas</RNText>
+              {(maxStats.denoBuckets.find(([d]) => d === expandedDeno)![1] as SlotMachine[])
+                .sort((a, b) => {
+                  const ba = Math.max(a.maxBet01 ?? 0, a.maxBet02 ?? 0, a.maxBet05 ?? 0, a.maxBet10 ?? 0);
+                  const bb = Math.max(b.maxBet01 ?? 0, b.maxBet02 ?? 0, b.maxBet05 ?? 0, b.maxBet10 ?? 0);
+                  return bb - ba;
+                })
+                .map((m, i) => {
+                  const mb = Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0);
+                  return (
+                    <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
+                      <RNText style={styles.betMcId}>{m.id}</RNText>
+                      <RNText style={styles.betMcLoc}>{m.location}</RNText>
+                      <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
+                      <RNText style={[styles.betMcVal, { color: C.navy }]}>{mb > 0 ? money(mb, 2) : '—'}</RNText>
+                    </View>
+                  );
+                })}
+            </View>
           )}
+
+          {/* Top 20 Max Bet chart */}
+          <View style={[card.base, { marginTop: 6 }]}>
+            <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Top 20 Apuesta Máxima</RNText></View>
+            {topBetBars.length ? <HBars data={topBetBars} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+          </View>
         </>
       )}
     </ScrollView>
@@ -651,6 +756,118 @@ const styles = StyleSheet.create({
   betTabActive: { backgroundColor: C.navy },
   betTabText: { fontSize: 13, fontWeight: '600', color: C.muted },
   betTabTextActive: { color: '#fff' },
+
+  // ── Apuestas redesign ────────────────────────────────────────────────────
+  betSwitcher: {
+    flexDirection: 'row', gap: 12,
+  },
+  betSwitchBtn: {
+    flex: 1, borderRadius: 14, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.card, padding: 16, alignItems: 'center', gap: 4,
+  },
+  betSwitchBtnActive: {
+    backgroundColor: C.navy, borderColor: C.navy,
+  },
+  betSwitchLabel: {
+    fontSize: 13, fontWeight: '900', color: C.muted, letterSpacing: 1.5,
+  },
+  betSwitchLabelActive: { color: '#fff' },
+  betSwitchSub: {
+    fontSize: 11, color: C.faint,
+  },
+
+  betHeroRow: { flexDirection: 'row', gap: 12 },
+  betHeroCard: {
+    flex: 1, borderRadius: 16, borderWidth: 1, padding: 18, gap: 6,
+    backgroundColor: '#f5f8fc', borderColor: C.border,
+  },
+  betHeroCardCenter: {
+    backgroundColor: '#f5f8fc', borderColor: C.border,
+  },
+  betHeroLabel: {
+    fontSize: 10, fontWeight: '800', color: C.muted, letterSpacing: 1,
+  },
+  betHeroVal: {
+    fontSize: 30, fontWeight: '900', letterSpacing: -1, color: C.navy,
+  },
+  betHeroSub: { fontSize: 11, color: C.muted },
+
+  betRangeBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: C.card, borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: C.border,
+  },
+  betRangeLabel: { fontSize: 12, fontWeight: '700', color: C.navy3 },
+  betRangeTrack: {
+    flex: 1, height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden', position: 'relative',
+  },
+  betRangeFill: {
+    height: '100%', backgroundColor: '#2d6a6a', borderRadius: 5,
+  },
+  betRangeMarker: {
+    position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, backgroundColor: C.gold,
+  },
+
+  betSegPress: {
+    backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
+    borderColor: C.border, borderLeftWidth: 5, overflow: 'hidden',
+  },
+  betSegPressHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, paddingBottom: 12,
+  },
+  betSegPressTitle: { fontSize: 15, fontWeight: '800' },
+  betSegPressSub: { fontSize: 11, color: C.muted, marginTop: 2 },
+  betSegPressRight: { alignItems: 'flex-end', gap: 2 },
+  betSegCount: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  betSegCountLabel: { fontSize: 10, color: C.muted },
+  betSegStats: {
+    flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border, paddingVertical: 12, paddingHorizontal: 16,
+  },
+  betStatItem: { flex: 1, alignItems: 'center' },
+  betStatVal: { fontSize: 16, fontWeight: '800', color: C.navy },
+  betStatLab: { fontSize: 10, color: C.muted, marginTop: 2 },
+
+  betMachineList: {
+    backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
+    borderColor: C.border, overflow: 'hidden', marginTop: -4,
+  },
+  betMachineListHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  betMcHeaderText: { fontSize: 10, fontWeight: '700', color: C.muted, letterSpacing: 0.4 },
+  betMachineRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 9,
+    paddingHorizontal: 14, gap: 8, backgroundColor: C.card,
+  },
+  betMcId:   { fontSize: 12, fontWeight: '800', color: C.navy, width: 42 },
+  betMcLoc:  { fontSize: 11, color: C.gold, fontWeight: '700', width: 46 },
+  betMcGame: { flex: 1, fontSize: 12, color: C.text },
+  betMcVal:  { fontSize: 13, fontWeight: '800', minWidth: 48, textAlign: 'right' },
+
+  denoStatCard: {
+    flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 4,
+  },
+  denoStatNum:   { fontSize: 36, fontWeight: '900', color: C.navy, letterSpacing: -1 },
+  denoStatLabel: { fontSize: 13, fontWeight: '700', color: C.text },
+  denoStatSub:   { fontSize: 11, color: C.muted, lineHeight: 15 },
+
+  denoTileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  denoTile: {
+    flexGrow: 1, flexBasis: 100, minWidth: 90,
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, alignItems: 'center', gap: 6,
+  },
+  denoTileBadge: {
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7,
+  },
+  denoTileBadgeText: { fontSize: 14, fontWeight: '900', color: '#fff' },
+  denoTileCount: { fontSize: 30, fontWeight: '900', color: C.navy, letterSpacing: -1 },
+  denoTileSub: { fontSize: 11, color: C.muted },
 
   betHeading: {
     fontSize: 20, fontWeight: '800', color: C.navy, letterSpacing: -0.3,

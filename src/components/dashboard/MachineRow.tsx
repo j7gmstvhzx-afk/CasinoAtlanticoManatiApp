@@ -12,39 +12,39 @@ type Props = {
 };
 
 export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
-  const mfrBg   = mfrColor(m.manufacturer, 0);
-  const maxBet  = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
+  const mfrBg  = mfrColor(m.manufacturer, 0);
+  const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
 
   return (
     <View style={styles.row}>
-      {/* ID + location */}
+      {/* ID + full location (always 09-01 format) */}
       <View style={styles.idCol}>
         <Text style={styles.machineId}>{m.id}</Text>
-        <Text style={styles.location}>{showBank ? m.location : m.location.split('-')[1]?.padStart(2, '0') ?? m.location}</Text>
+        <Text style={styles.location}>{m.location}</Text>
       </View>
 
       {/* Game + manufacturer pill */}
       <View style={styles.gameCol}>
-        <Text style={styles.game} numberOfLines={1}>{m.game}</Text>
-        <View style={[styles.mfrPill, { backgroundColor: mfrBg + '22', borderColor: mfrBg + '55' }]}>
+        <Text style={styles.game} numberOfLines={2}>{m.game}</Text>
+        <View style={[styles.mfrPill, { backgroundColor: mfrBg + '18', borderColor: mfrBg + '55' }]}>
           <Text style={[styles.mfrText, { color: mfrBg }]}>{shortMfr(m.manufacturer)}</Text>
         </View>
       </View>
 
-      {/* Metrics */}
+      {/* Metrics — labeled Avg CI PD / Avg Win PD */}
       <View style={styles.metricsCol}>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Coin-In</Text>
+        <View style={styles.metricGroup}>
+          <Text style={styles.metricTag}>Avg CI PD</Text>
           <Text style={styles.metricValue}>{money(m.avgCoinIn ?? 0, 0)}</Text>
         </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Win</Text>
+        <View style={styles.metricGroup}>
+          <Text style={styles.metricTag}>Avg Win PD</Text>
           <Text style={[styles.metricValue, styles.winValue]}>{money(m.avgWin ?? 0, 0)}</Text>
         </View>
         {maxBet != null && (
-          <View style={styles.metricRow}>
-            <Text style={styles.metricLabel}>Max Bet</Text>
-            <Text style={styles.metricValue}>{money(maxBet, 2)}</Text>
+          <View style={styles.metricGroup}>
+            <Text style={styles.metricTag}>Max Bet</Text>
+            <Text style={[styles.metricValue, { color: C.navy3 }]}>{money(maxBet, 2)}</Text>
           </View>
         )}
       </View>
@@ -63,39 +63,43 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e8ecf0',
-    gap: 8,
+    borderBottomColor: C.border,
+    gap: 10,
     backgroundColor: C.card,
   },
   idCol: {
-    width: 46,
+    width: 50,
+    gap: 2,
   },
   machineId: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: C.navy,
+    letterSpacing: -0.2,
   },
   location: {
-    fontSize: 12,
-    color: C.muted,
-    marginTop: 1,
+    fontSize: 11,
+    color: C.gold,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   gameCol: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   game: {
     fontSize: 13,
     fontWeight: '600',
     color: C.text,
+    lineHeight: 17,
   },
   mfrPill: {
     alignSelf: 'flex-start',
-    borderRadius: 4,
-    paddingHorizontal: 6,
+    borderRadius: 5,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderWidth: 1,
   },
@@ -105,34 +109,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   metricsCol: {
-    gap: 2,
+    gap: 4,
     alignItems: 'flex-end',
   },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 4,
-    alignItems: 'center',
+  metricGroup: {
+    alignItems: 'flex-end',
   },
-  metricLabel: {
-    fontSize: 11,
+  metricTag: {
+    fontSize: 9,
+    fontWeight: '700',
     color: C.muted,
-    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   metricValue: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: C.navy3,
-    minWidth: 58,
-    textAlign: 'right',
+    letterSpacing: -0.2,
   },
   winValue: {
     color: C.green,
   },
   editBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: '#eef1f5',
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

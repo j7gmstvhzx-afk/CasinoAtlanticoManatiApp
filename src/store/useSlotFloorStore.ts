@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
-import { calcPeriodTotal, periodStart, toDateString, subDays } from '@/utils/dateRange';
 import type {
   SlotMachine, CoinInEntry, FloorStats, ExplorerFilters, MachineChange,
-  CoinInPeriod, SlotManufacturer, SlotMachineType,
+  SlotManufacturer, SlotMachineType,
 } from '@/types/domain';
 
 // ── Stats computation ────────────────────────────────────────────────────────
@@ -52,6 +51,13 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
     distribution: buildDist(vals),
   });
 
+  const withAvg     = active.filter(m => m.avgCoinIn != null && m.avgWin != null);
+  const totalCoinIn = withAvg.reduce((s, m) => s + (m.avgCoinIn ?? 0), 0);
+  const totalWin    = withAvg.reduce((s, m) => s + (m.avgWin ?? 0), 0);
+  const avgCoinIn   = withAvg.length ? totalCoinIn / withAvg.length : 0;
+  const avgWin      = withAvg.length ? totalWin    / withAvg.length : 0;
+  const winPct      = totalCoinIn > 0 ? (totalWin / totalCoinIn) * 100 : 0;
+
   return {
     total:       machines.length,
     active:      active.length,
@@ -61,6 +67,9 @@ function computeFloorStats(machines: SlotMachine[]): FloorStats {
     singleDeno:  active.filter(m => !m.multiDeno).length,
     byManufacturer,
     byDenomination,
+    avgCoinIn,
+    avgWin,
+    winPct,
     minBetStats: {
       min:             allMin.length ? allMin.reduce((a, b) => (b < a ? b : a)) : 0,
       max:             allMin.length ? allMin.reduce((a, b) => (b > a ? b : a)) : 0,
@@ -93,27 +102,26 @@ function rowToMachine(row: Record<string, unknown>): SlotMachine {
     maxBet10:     row.max_bet_10 != null ? Number(row.max_bet_10) : null,
     active:       Boolean(row.active),
     period:       row.period != null ? String(row.period) : null,
-  };
-}
-
-function rowToCoinIn(row: Record<string, unknown>): CoinInEntry {
-  return {
-    machineId: String(row.machine_id),
-    date:      String(row.date),
-    amount:    Number(row.amount),
+    periodStart:  row.period_start != null ? String(row.period_start) : null,
+    periodEnd:    row.period_end   != null ? String(row.period_end)   : null,
+    avgCoinIn:    row.avg_coin_in != null ? Number(row.avg_coin_in) : undefined,
+    avgWin:       row.avg_win     != null ? Number(row.avg_win)     : undefined,
   };
 }
 
 function rowToChange(row: Record<string, unknown>): MachineChange {
   return {
+    id:           row.id != null ? Number(row.id) : undefined,
     mc:           String(row.mc),
     type:         row.type as MachineChange['type'],
-    manufacturer: row.manufacturer as SlotManufacturer,
-    game2024:     row.game_2024 != null ? String(row.game_2024) : undefined,
-    game2025:     String(row.game_2025 ?? ''),
+    manufacturer: String(row.manufacturer ?? ''),
+    game2024:     row.game_2024     != null ? String(row.game_2024)     : undefined,
+    game2025:     row.game_2025     != null ? String(row.game_2025)     : undefined,
     location2024: row.location_2024 != null ? String(row.location_2024) : undefined,
-    location2025: String(row.location_2025 ?? ''),
+    location2025: row.location_2025 != null ? String(row.location_2025) : undefined,
     bank:         Number(row.bank ?? 0),
+    recordedAt:   row.recorded_at  != null ? String(row.recorded_at)  : undefined,
+    periodLabel:  row.period_label  != null ? String(row.period_label)  : undefined,
   };
 }
 
@@ -131,18 +139,65 @@ function machineToDbPatch(patch: Partial<SlotMachine>): Record<string, unknown> 
   if (patch.maxBet10     !== undefined) db.max_bet_10    = patch.maxBet10;
   if (patch.active       !== undefined) db.active        = patch.active;
   if (patch.period       !== undefined) db.period        = patch.period;
+  if (patch.periodStart  !== undefined) db.period_start  = patch.periodStart;
+  if (patch.periodEnd    !== undefined) db.period_end    = patch.periodEnd;
+  if (patch.avgCoinIn    !== undefined) db.avg_coin_in   = patch.avgCoinIn;
+  if (patch.avgWin       !== undefined) db.avg_win       = patch.avgWin;
   db.updated_at = new Date().toISOString();
   return db;
 }
 
-// ── Store interface ───────────────────────────────────────────────────────────
+// ── Bank groups ───────────────────────────────────────────────────────────────
 
 export type BankGroup = {
   bank: string;
+  bankNum: number;
   machines: SlotMachine[];
+  avgCoinIn: number;
+  avgWin: number;
   totalCoinIn: number;
+  totalWin: number;
   topGame: string;
 };
+
+function buildBankGroups(machines: SlotMachine[]): BankGroup[] {
+  const bankMap = new Map<string, SlotMachine[]>();
+  for (const m of machines) {
+    const bank = m.location.split('-')[0];
+    if (!bankMap.has(bank)) bankMap.set(bank, []);
+    bankMap.get(bank)!.push(m);
+  }
+
+  return Array.from(bankMap.entries())
+    .map(([bank, ms]) => {
+      const withAvg   = ms.filter(m => m.avgCoinIn != null && m.avgWin != null);
+      const totalCoin = withAvg.reduce((s, m) => s + (m.avgCoinIn ?? 0), 0);
+      const totalWin  = withAvg.reduce((s, m) => s + (m.avgWin ?? 0), 0);
+      const avgCoinIn = withAvg.length ? totalCoin / withAvg.length : 0;
+      const avgWin    = withAvg.length ? totalWin  / withAvg.length : 0;
+
+      // Top game by avg coin-in
+      let topGame = '';
+      let topCoin = 0;
+      for (const m of ms) {
+        if ((m.avgCoinIn ?? 0) > topCoin) { topCoin = m.avgCoinIn ?? 0; topGame = m.game; }
+      }
+
+      return {
+        bank,
+        bankNum:    parseInt(bank, 10),
+        machines:   ms,
+        avgCoinIn,
+        avgWin,
+        totalCoinIn: totalCoin,
+        totalWin,
+        topGame: topGame || (ms[0]?.game ?? ''),
+      };
+    })
+    .sort((a, b) => a.bankNum - b.bankNum);
+}
+
+// ── Store interface ───────────────────────────────────────────────────────────
 
 interface SlotFloorStore {
   initialized:     boolean;
@@ -153,18 +208,17 @@ interface SlotFloorStore {
   explorerSearch:  string;
   explorerFilters: ExplorerFilters;
 
-  init:                  () => Promise<void>;
-  updateMachine:         (id: string, patch: Partial<SlotMachine>) => Promise<void>;
-  batchUpdateMachines:   (ids: string[], patch: Partial<SlotMachine>) => Promise<void>;
-  addOrUpdateCoinIn:     (entry: CoinInEntry) => Promise<void>;
-  setExplorerSearch:     (q: string) => void;
-  setExplorerFilter:     (key: keyof ExplorerFilters, value: string | null) => void;
-  clearExplorerFilters:  () => void;
+  init:                 () => Promise<void>;
+  updateMachine:        (id: string, patch: Partial<SlotMachine>) => Promise<void>;
+  batchUpdateMachines:  (ids: string[], patch: Partial<SlotMachine>) => Promise<void>;
+  setExplorerSearch:    (q: string) => void;
+  setExplorerFilter:    (key: keyof ExplorerFilters, value: string | null) => void;
+  clearExplorerFilters: () => void;
 
-  getFilteredMachines:    () => SlotMachine[];
-  getPeriodTotal:         (period: CoinInPeriod, machineId?: string) => number;
-  getTopMachinesByCoinIn: (period: CoinInPeriod, n?: number) => Array<{ machine: SlotMachine; total: number }>;
-  getBankGroups:          (period: CoinInPeriod) => BankGroup[];
+  getFilteredMachines: () => SlotMachine[];
+  getBankGroups:       () => BankGroup[];
+  getBankRanking:      (metric: 'avgWin' | 'avgCoinIn') => { best: BankGroup[]; worst: BankGroup[] };
+  getTopMachines:      (metric: 'avgWin' | 'avgCoinIn', n?: number) => SlotMachine[];
 }
 
 const EMPTY_STATS = computeFloorStats([]);
@@ -182,18 +236,15 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   async init() {
     if (get().initialized) return;
     try {
-      const [mRes, cRes, chRes] = await Promise.all([
+      const [mRes, chRes] = await Promise.all([
         supabase.from('machines').select('*'),
-        // .range(0, 50000) bypasses the default 1000-row cap
-        supabase.from('coin_in_entries').select('*').range(0, 50000),
-        supabase.from('machine_changes').select('*'),
+        supabase.from('machine_changes').select('*').order('recorded_at', { ascending: false }),
       ]);
 
       const machines       = (mRes.data  ?? []).map(r => rowToMachine(r as Record<string, unknown>));
-      const coinIn         = (cRes.data  ?? []).map(r => rowToCoinIn(r as Record<string, unknown>));
       const machineChanges = (chRes.data ?? []).map(r => rowToChange(r as Record<string, unknown>));
 
-      set({ initialized: true, machines, coinIn, machineChanges, floorStats: computeFloorStats(machines) });
+      set({ initialized: true, machines, machineChanges, floorStats: computeFloorStats(machines) });
     } catch {
       set({ initialized: true });
     }
@@ -201,9 +252,82 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
 
   // ── machine edits ─────────────────────────────────────────────────────────
   async updateMachine(id, patch) {
+    const prev = get().machines.find(m => m.id === id);
     const updated = get().machines.map(m => m.id === id ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
+
     await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+
+    // Auto-detect and record change type(s)
+    if (!prev) return;
+    const newGame     = patch.game     ?? prev.game;
+    const newLocation = patch.location ?? prev.location;
+    const gameChanged     = newGame     !== prev.game;
+    const locationChanged = newLocation !== prev.location;
+
+    if (!gameChanged && !locationChanged) return;
+
+    const changesToInsert: Omit<MachineChange, 'id' | 'recordedAt'>[] = [];
+
+    if (gameChanged && !locationChanged) {
+      changesToInsert.push({
+        mc:           id,
+        type:         'cambio_juego',
+        manufacturer: String(patch.manufacturer ?? prev.manufacturer),
+        game2024:     prev.game,
+        game2025:     newGame,
+        location2024: prev.location,
+        location2025: prev.location,
+        bank:         parseInt(prev.location.split('-')[0], 10),
+        periodLabel:  String(patch.period ?? prev.period ?? ''),
+      });
+    }
+    if (locationChanged && !gameChanged) {
+      changesToInsert.push({
+        mc:           id,
+        type:         'reubicacion',
+        manufacturer: String(patch.manufacturer ?? prev.manufacturer),
+        game2024:     prev.game,
+        game2025:     prev.game,
+        location2024: prev.location,
+        location2025: newLocation,
+        bank:         parseInt(prev.location.split('-')[0], 10),
+        periodLabel:  String(patch.period ?? prev.period ?? ''),
+      });
+    }
+    if (gameChanged && locationChanged) {
+      changesToInsert.push({
+        mc:           id,
+        type:         'cambio_juego',
+        manufacturer: String(patch.manufacturer ?? prev.manufacturer),
+        game2024:     prev.game,
+        game2025:     newGame,
+        location2024: prev.location,
+        location2025: newLocation,
+        bank:         parseInt(prev.location.split('-')[0], 10),
+        periodLabel:  String(patch.period ?? prev.period ?? ''),
+      });
+    }
+
+    if (changesToInsert.length === 0) return;
+
+    const dbRows = changesToInsert.map(c => ({
+      mc:           c.mc,
+      type:         c.type,
+      manufacturer: c.manufacturer,
+      game_2024:    c.game2024   ?? null,
+      game_2025:    c.game2025   ?? null,
+      location_2024: c.location2024 ?? null,
+      location_2025: c.location2025 ?? null,
+      bank:         c.bank,
+      period_label: c.periodLabel ?? null,
+    }));
+
+    const { data: inserted } = await supabase.from('machine_changes').insert(dbRows).select();
+    if (inserted) {
+      const newChanges = inserted.map(r => rowToChange(r as Record<string, unknown>));
+      set(s => ({ machineChanges: [...newChanges, ...s.machineChanges] }));
+    }
   },
 
   async batchUpdateMachines(ids, patch) {
@@ -215,27 +339,10 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     }
   },
 
-  // ── coin-in ───────────────────────────────────────────────────────────────
-  async addOrUpdateCoinIn(entry) {
-    const prev = get().coinIn;
-    const idx  = prev.findIndex(e => e.machineId === entry.machineId && e.date === entry.date);
-    const upserted = idx >= 0
-      ? prev.map((e, i) => (i === idx ? entry : e))
-      : [...prev, entry];
-    const cutoff = toDateString(subDays(new Date(), 400));
-    const updated = upserted.filter(e => e.date >= cutoff);
-    set({ coinIn: updated });
-    await supabase.from('coin_in_entries').upsert({
-      machine_id: entry.machineId,
-      date:       entry.date,
-      amount:     entry.amount,
-    });
-  },
-
   // ── explorer ──────────────────────────────────────────────────────────────
-  setExplorerSearch:    (q)         => set({ explorerSearch: q }),
+  setExplorerSearch:    (q)          => set({ explorerSearch: q }),
   setExplorerFilter:    (key, value) => set(s => ({ explorerFilters: { ...s.explorerFilters, [key]: value } })),
-  clearExplorerFilters: ()          => set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
+  clearExplorerFilters: ()           => set({ explorerSearch: '', explorerFilters: { manufacturer: null, type: null, denomination: null } }),
 
   // ── selectors ─────────────────────────────────────────────────────────────
   getFilteredMachines() {
@@ -251,70 +358,29 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     });
   },
 
-  getPeriodTotal(period, machineId) {
-    const entries = machineId
-      ? get().coinIn.filter(e => e.machineId === machineId)
-      : get().coinIn;
-    return calcPeriodTotal(entries, period);
+  getBankGroups() {
+    return buildBankGroups(get().machines);
   },
 
-  getTopMachinesByCoinIn(period, n = 10) {
-    const { machines, coinIn } = get();
-    const fromStr = toDateString(periodStart(period));
-    const toStr   = toDateString(new Date());
-    return machines
-      .map(machine => ({
-        machine,
-        total: coinIn
-          .filter(e => e.machineId === machine.id && e.date >= fromStr && e.date <= toStr)
-          .reduce((s, e) => s + e.amount, 0),
-      }))
-      .sort((a, b) => b.total - a.total)
+  getBankRanking(metric) {
+    const groups = buildBankGroups(get().machines);
+    const sorted = [...groups].sort((a, b) =>
+      metric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
+    );
+    return {
+      best:  sorted.slice(0, 5),
+      worst: sorted.slice(-5).reverse(),
+    };
+  },
+
+  getTopMachines(metric, n = 10) {
+    return [...get().machines]
+      .filter(m => m.avgCoinIn != null && m.avgWin != null)
+      .sort((a, b) =>
+        metric === 'avgWin'
+          ? (b.avgWin ?? 0) - (a.avgWin ?? 0)
+          : (b.avgCoinIn ?? 0) - (a.avgCoinIn ?? 0)
+      )
       .slice(0, n);
-  },
-
-  getBankGroups(period) {
-    const { machines, coinIn } = get();
-    const fromStr = toDateString(periodStart(period));
-    const toStr   = toDateString(new Date());
-
-    const machineBankMap = new Map(machines.map(m => [m.id, m.location.split('-')[0]]));
-
-    const bankMap = new Map<string, { machines: SlotMachine[]; coinInByMachine: Map<string, number> }>();
-    for (const m of machines) {
-      const bank = m.location.split('-')[0];
-      if (!bankMap.has(bank)) bankMap.set(bank, { machines: [], coinInByMachine: new Map() });
-      bankMap.get(bank)!.machines.push(m);
-    }
-
-    for (const entry of coinIn) {
-      if (entry.date < fromStr || entry.date > toStr) continue;
-      const bank = machineBankMap.get(entry.machineId);
-      if (!bank) continue;
-      const group = bankMap.get(bank);
-      if (!group) continue;
-      group.coinInByMachine.set(
-        entry.machineId,
-        (group.coinInByMachine.get(entry.machineId) ?? 0) + entry.amount,
-      );
-    }
-
-    return Array.from(bankMap.entries())
-      .map(([bank, data]) => {
-        const totalCoinIn = Array.from(data.coinInByMachine.values()).reduce((s, v) => s + v, 0);
-        let topGame = '';
-        let topAmt  = 0;
-        for (const m of data.machines) {
-          const amt = data.coinInByMachine.get(m.id) ?? 0;
-          if (amt > topAmt) { topAmt = amt; topGame = m.game; }
-        }
-        return {
-          bank,
-          machines:    data.machines,
-          totalCoinIn,
-          topGame: topGame || (data.machines[0]?.game ?? ''),
-        };
-      })
-      .sort((a, b) => b.totalCoinIn - a.totalCoinIn);
   },
 }));

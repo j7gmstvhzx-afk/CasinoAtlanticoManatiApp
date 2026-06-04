@@ -1,26 +1,33 @@
 import React, { useState } from 'react';
 import {
-  KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View,
+  KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Text } from '@/components/ui';
-import { spacing, radius } from '@/theme';
 import { useAuthStore } from '@/store/useAuthStore';
 
-const NAVY = '#1a2332';
-const GOLD = '#d4a574';
-const TEAL = '#2a9d8f';
+const NAVY   = '#1a2332';
+const NAVY2  = '#243042';
+const GOLD   = '#d4a574';
+const GOLD2  = '#c89b63';
+const WHITE  = '#ffffff';
 
 export default function LoginScreen() {
   const session = useAuthStore(s => s.session);
   const signIn  = useAuthStore(s => s.signIn);
+  const { width } = useWindowDimensions();
 
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState<string | null>(null);
   const [busy,     setBusy]     = useState(false);
+  const [focusEmail, setFocusEmail] = useState(false);
+  const [focusPass,  setFocusPass]  = useState(false);
 
   if (session) return <Redirect href="/" />;
+
+  const wide = width >= 720;
 
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
@@ -38,149 +45,310 @@ export default function LoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.card}>
-        {/* Logo */}
-        <View style={styles.logoWrap}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoChar}>CA</Text>
+      <View style={[styles.container, wide && styles.containerWide]}>
+
+        {/* ── Brand panel (left on wide, top on narrow) ─────────────────── */}
+        <View style={[styles.brand, wide && styles.brandWide]}>
+          {/* Monogram */}
+          <View style={styles.monogram}>
+            <Text style={styles.monogramText}>CA</Text>
+          </View>
+
+          <View style={styles.brandText}>
+            <Text style={styles.brandTitle}>Casino</Text>
+            <Text style={styles.brandTitle}>Atlántico</Text>
+            <View style={styles.goldDivider} />
+            <Text style={styles.brandSub}>MANATÍ · PUERTO RICO</Text>
+          </View>
+
+          <Text style={styles.brandTagline}>PLATAFORMA OPERATIVA DE PISO</Text>
+
+          {/* Decorative gold sheen circles */}
+          <View style={styles.sheen1} pointerEvents="none" />
+          <View style={styles.sheen2} pointerEvents="none" />
+        </View>
+
+        {/* ── Form panel (right on wide, bottom on narrow) ───────────────── */}
+        <View style={[styles.formWrapper, wide && styles.formWrapperWide]}>
+          <View style={[styles.glassCard, wide && styles.glassCardWide]}>
+            <Text style={styles.formTitle}>Iniciar Sesión</Text>
+            <Text style={styles.formSubtitle}>Acceso restringido al personal autorizado</Text>
+
+            {/* Email field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>CORREO ELECTRÓNICO</Text>
+              <TextInput
+                style={[styles.input, focusEmail && styles.inputFocus]}
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusEmail(true)}
+                onBlur={() => setFocusEmail(false)}
+                placeholder="usuario@casino.com"
+                placeholderTextColor="#9ba8b8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+              {focusEmail && <View style={styles.focusLine} />}
+            </View>
+
+            {/* Password field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>CONTRASEÑA</Text>
+              <TextInput
+                style={[styles.input, focusPass && styles.inputFocus]}
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusPass(true)}
+                onBlur={() => setFocusPass(false)}
+                placeholder="••••••••"
+                placeholderTextColor="#9ba8b8"
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+              {focusPass && <View style={styles.focusLine} />}
+            </View>
+
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            <Pressable
+              style={[styles.btn, busy && styles.btnBusy]}
+              onPress={handleLogin}
+              disabled={busy}
+            >
+              {busy ? (
+                <View style={styles.btnBusyRow}>
+                  <View style={styles.busyDot} />
+                  <View style={[styles.busyDot, { opacity: 0.6 }]} />
+                  <View style={[styles.busyDot, { opacity: 0.3 }]} />
+                </View>
+              ) : (
+                <Text style={styles.btnText}>Entrar al Sistema</Text>
+              )}
+            </Pressable>
+
+            <Text style={styles.hint}>Casino Atlántico Manatí · Uso Interno</Text>
           </View>
         </View>
-
-        <Text style={styles.title}>Casino Atlántico</Text>
-        <Text style={styles.subtitle}>PLATAFORMA OPERATIVA · MANATÍ</Text>
-
-        {/* Fields */}
-        <View style={styles.fields}>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Correo electrónico"
-            placeholderTextColor="#94a3b8"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="next"
-          />
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Contraseña"
-            placeholderTextColor="#94a3b8"
-            secureTextEntry
-            returnKeyType="done"
-            onSubmitEditing={handleLogin}
-          />
-        </View>
-
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <Pressable
-          style={[styles.btn, busy && styles.btnDisabled]}
-          onPress={handleLogin}
-          disabled={busy}
-        >
-          <Text style={styles.btnText}>
-            {busy ? 'Verificando...' : 'Iniciar sesión'}
-          </Text>
-        </Pressable>
-
-        <Text style={styles.hint}>Acceso restringido al personal autorizado.</Text>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  root: { flex: 1, backgroundColor: NAVY },
+
+  container: {
     flex: 1,
-    backgroundColor: NAVY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
+    flexDirection: 'column',
   },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#ffffff',
-    borderRadius: radius.xl,
-    padding: spacing.xxl,
+  containerWide: {
+    flexDirection: 'row',
+  },
+
+  // ── Brand panel ──────────────────────────────────────────────────────────────
+  brand: {
+    backgroundColor: NAVY,
+    paddingHorizontal: 32,
+    paddingVertical: 48,
     alignItems: 'center',
-    gap: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.20,
+    justifyContent: 'center',
+    gap: 20,
+    overflow: 'hidden',
+  },
+  brandWide: {
+    flex: 55,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingLeft: 60,
+  },
+  monogram: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: GOLD + '55',
+    backgroundColor: NAVY2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
     shadowRadius: 24,
     elevation: 8,
   },
-  logoWrap:   { marginBottom: spacing.sm },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: NAVY,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoChar: {
+  monogramText: {
     fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 36,
+    fontWeight: '800',
     color: GOLD,
-    fontWeight: '800',
-    fontSize: 24,
-    letterSpacing: 1,
+    letterSpacing: 2,
   },
-  title: {
+  brandText: { gap: 2 },
+  brandTitle: {
     fontFamily: "'Playfair Display', Georgia, serif",
-    fontSize: 24,
-    fontWeight: '800',
-    color: NAVY,
-    textAlign: 'center',
+    fontSize: 40,
+    fontWeight: '900',
+    color: WHITE,
+    letterSpacing: -0.5,
+    lineHeight: 46,
   },
-  subtitle: {
+  goldDivider: {
+    width: 56,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: GOLD,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  brandSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: GOLD + 'bb',
+    letterSpacing: 2.5,
+  },
+  brandTagline: {
     fontSize: 11,
     fontWeight: '600',
-    color: TEAL,
+    color: WHITE + '55',
     letterSpacing: 1.5,
-    textAlign: 'center',
-    marginBottom: spacing.md,
   },
-  fields: { width: '100%', gap: spacing.md },
-  input: {
+  sheen1: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: GOLD + '0a',
+    top: -80,
+    right: -80,
+    transform: [{ scaleX: 1.4 }],
+  },
+  sheen2: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: GOLD + '06',
+    bottom: -40,
+    left: -40,
+  },
+
+  // ── Form panel ───────────────────────────────────────────────────────────────
+  formWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: NAVY + 'cc',
+  },
+  formWrapperWide: {
+    flex: 45,
+    backgroundColor: NAVY2,
+  },
+  glassCard: {
     width: '100%',
-    backgroundColor: '#f8f9fa',
-    borderRadius: radius.md,
+    maxWidth: 400,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    color: NAVY,
+    borderColor: GOLD + '33',
+    padding: 32,
+    gap: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 12,
+  },
+  glassCardWide: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  formTitle: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 26,
+    fontWeight: '800',
+    color: WHITE,
+    letterSpacing: -0.3,
+  },
+  formSubtitle: {
+    fontSize: 13,
+    color: WHITE + '66',
+    marginTop: -10,
+  },
+
+  fieldGroup: { gap: 6 },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: GOLD + 'aa',
+    letterSpacing: 1.2,
+  },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: WHITE + '22',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    color: WHITE,
     fontSize: 15,
   },
+  inputFocus: {
+    borderColor: GOLD + '66',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  focusLine: {
+    height: 2,
+    backgroundColor: GOLD,
+    borderRadius: 1,
+    marginTop: -1,
+  },
+
   errorText: {
-    color: '#dc2626',
+    color: '#fc8181',
     fontSize: 13,
     textAlign: 'center',
-    marginTop: -spacing.xs,
+    marginTop: -8,
   },
+
   btn: {
     width: '100%',
-    padding: spacing.md,
-    borderRadius: radius.md,
+    paddingVertical: 14,
+    borderRadius: 12,
     backgroundColor: NAVY,
+    borderWidth: 1,
+    borderColor: GOLD + '55',
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: 4,
   },
-  btnDisabled: { opacity: 0.55 },
+  btnBusy: {
+    backgroundColor: NAVY2,
+    borderColor: GOLD + '33',
+  },
   btnText: {
-    color: '#ffffff',
+    color: WHITE,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
+  btnBusyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    height: 22,
+  },
+  busyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: GOLD,
+  },
+
   hint: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: WHITE + '44',
     textAlign: 'center',
-    marginTop: spacing.sm,
   },
 });

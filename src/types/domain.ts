@@ -70,9 +70,16 @@ export type AppNotification = {
 
 // ── Slot Floor Analytics ──────────────────────────────────────────────────────
 
-export type SlotManufacturer = 'Light & Wonder' | 'Aristocrat' | 'IGT' | 'Konami' | 'Everi';
+export type SlotManufacturer =
+  | 'Light & Wonder'
+  | 'Aristocrat'
+  | 'IGT'
+  | 'Konami'
+  | 'Everi'
+  | 'Ainsworth'
+  | 'WMS';
+
 export type SlotMachineType = 'Easy Bet' | 'Multi Line';
-export type CoinInPeriod = 'ytd' | 'mtd' | 'quarterly' | 'semiannual' | 'annual';
 
 export type SlotMachine = {
   id: string;
@@ -89,6 +96,10 @@ export type SlotMachine = {
   maxBet10: number | null;
   active: boolean;
   period?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  avgCoinIn?: number;
+  avgWin?: number;
 };
 
 export type CoinInEntry = {
@@ -106,6 +117,9 @@ export type FloorStats = {
   singleDeno: number;
   byManufacturer: Array<{ name: string; count: number }>;
   byDenomination: Array<{ label: string; count: number }>;
+  avgCoinIn: number;
+  avgWin: number;
+  winPct: number;
   minBetStats: {
     min: number;
     max: number;
@@ -130,14 +144,17 @@ export type FloorStats = {
 };
 
 export type MachineChange = {
+  id?: number;
   mc: string;
-  type: 'compra' | 'reubicacion' | 'cambio_juego';
-  manufacturer: SlotManufacturer;
+  type: 'compra' | 'reubicacion' | 'cambio_juego' | 'removida';
+  manufacturer: string;
   game2024?: string;
-  game2025: string;
+  game2025?: string;
   location2024?: string;
-  location2025: string;
+  location2025?: string;
   bank: number;
+  recordedAt?: string;
+  periodLabel?: string;
 };
 
 export type ExplorerFilters = {

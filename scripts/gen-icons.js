@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Generates public/icon-512.png and public/icon-192.png
-// Design: casino poker chip matching Casino Atlántico Manatí blue logo
+// Generates public/icon-512.png, icon-192.png, favicon-32.png
+// White-background opaque PNG — required for PWA maskable icons
 
 const { PNG } = require('pngjs');
 const fs   = require('fs');
@@ -9,61 +9,46 @@ const path = require('path');
 const OUT = path.join(__dirname, '..', 'public');
 fs.mkdirSync(OUT, { recursive: true });
 
-// Logo blue: #5b8ec5   Navy: #1a2332
-const CHIP_BLUE = [91, 142, 197];
-const WHITE     = [255, 255, 255];
-const LIGHT_BG  = [240, 244, 250]; // very light blue-gray background inside chip
+// Colors (RGB)
+const BLUE  = [91, 142, 197];   // #5b8ec5 — logo blue
+const WHITE = [255, 255, 255];
 
 function renderChip(SIZE) {
   const png  = new PNG({ width: SIZE, height: SIZE, filterType: -1 });
   const data = png.data;
-  const cx   = SIZE / 2, cy = SIZE / 2;
+  const cx = SIZE / 2, cy = SIZE / 2;
 
-  // All radii as pixel values
-  const R_OUT  = SIZE * 0.468; // outer chip edge
-  const R_RING = SIZE * 0.410; // inside edge of chip ring
-  const R_SEP  = SIZE * 0.375; // outer edge of white separator gap
-  const R_IN   = SIZE * 0.345; // inner circle
+  // Radii
+  const R_OUT  = SIZE * 0.468;
+  const R_RING = SIZE * 0.405;
+  const R_SEP  = SIZE * 0.370;
+  const R_IN   = SIZE * 0.340;
 
-  const NOTCHES    = 12;
-  const NOTCH_W    = 0.42; // fraction of each segment taken by white notch
+  const NOTCHES = 12;
+  const NOTCH_W = 0.40;
 
-  // Floral parameters (relative to R_IN)
-  const PETAL_DIST  = R_IN * 0.44;
-  const PETAL_R     = R_IN * 0.27;
-  const INNER_DIST  = R_IN * 0.21;
-  const INNER_R     = R_IN * 0.14;
-  const CENTER_R    = R_IN * 0.12;
-  const N           = 8; // number of petals
+  // Floral params (relative to R_IN)
+  const PD = R_IN * 0.44;   // petal center distance
+  const PR = R_IN * 0.275;  // petal radius
+  const SD = R_IN * 0.21;   // small petal dist
+  const SR = R_IN * 0.145;  // small petal radius
+  const CR = R_IN * 0.12;   // center dot radius
+  const NP = 8;
 
-  // Smooth edge: 1 inside, 0 outside, anti-aliased over 1.5px
   const AA = Math.max(1.5, SIZE * 0.003);
-  function edgeFactor(d, r) {
-    return Math.max(0, Math.min(1, (r + AA - d) / (2 * AA)));
-  }
+  function edge(d, r) { return Math.max(0, Math.min(1, (r + AA - d) / (2 * AA))); }
 
-  // Blend fg onto bg with weight α ∈ [0,1], pre-composited to white
-  function blendOnWhite(fg, α) {
-    return [
-      Math.round(fg[0] * α + 255 * (1 - α)),
-      Math.round(fg[1] * α + 255 * (1 - α)),
-      Math.round(fg[2] * α + 255 * (1 - α)),
-    ];
-  }
-
-  function inFloral(dx, dy, d) {
-    if (d <= CENTER_R) return true;
-    for (let i = 0; i < N; i++) {
-      const a = (i * 2 * Math.PI) / N;
-      const px = Math.cos(a) * PETAL_DIST - dx;
-      const py = Math.sin(a) * PETAL_DIST - dy;
-      if (px*px + py*py <= PETAL_R * PETAL_R) return true;
+  function floralAt(dx, dy, d) {
+    if (d <= CR) return true;
+    for (let i = 0; i < NP; i++) {
+      const a = (i * 2 * Math.PI) / NP;
+      const ex = Math.cos(a) * PD - dx, ey = Math.sin(a) * PD - dy;
+      if (ex*ex + ey*ey <= PR*PR) return true;
     }
-    for (let i = 0; i < N; i++) {
-      const a = (i * 2 * Math.PI) / N + Math.PI / N;
-      const px = Math.cos(a) * INNER_DIST - dx;
-      const py = Math.sin(a) * INNER_DIST - dy;
-      if (px*px + py*py <= INNER_R * INNER_R) return true;
+    for (let i = 0; i < NP; i++) {
+      const a = (i * 2 * Math.PI) / NP + Math.PI / NP;
+      const ex = Math.cos(a) * SD - dx, ey = Math.sin(a) * SD - dy;
+      if (ex*ex + ey*ey <= SR*SR) return true;
     }
     return false;
   }
@@ -74,66 +59,45 @@ function renderChip(SIZE) {
       const d  = Math.sqrt(dx*dx + dy*dy);
       const idx = (y * SIZE + x) * 4;
 
-      // Outer chip boundary alpha (handles the round edge)
-      const chipA = edgeFactor(d, R_OUT);
+      // Always opaque white background
+      let r = 255, g = 255, b = 255;
 
-      let r = 255, g = 255, b = 255, a = 0;
-
+      const chipA = edge(d, R_OUT);
       if (chipA > 0) {
-        let color;
+        let fg;
 
         if (d <= R_IN) {
-          // Inner circle: white background with blue floral
-          const floralA = edgeFactor(d, R_IN);
-          color = inFloral(dx, dy, d) ? CHIP_BLUE : WHITE;
-          // soft-clip the edge of the inner circle
-          const bg = LIGHT_BG;
-          color = [
-            Math.round(color[0] * floralA + bg[0] * (1 - floralA)),
-            Math.round(color[1] * floralA + bg[1] * (1 - floralA)),
-            Math.round(color[2] * floralA + bg[2] * (1 - floralA)),
-          ];
-
+          fg = floralAt(dx, dy, d) ? BLUE : WHITE;
+          const innerA = edge(d, R_IN);
+          r = Math.round(fg[0] * innerA + 255 * (1 - innerA));
+          g = Math.round(fg[1] * innerA + 255 * (1 - innerA));
+          b = Math.round(fg[2] * innerA + 255 * (1 - innerA));
         } else if (d <= R_SEP) {
-          // White separator / gap between inner circle and ring
-          color = WHITE;
-
+          // White separator
+          fg = WHITE;
+          r = fg[0]; g = fg[1]; b = fg[2];
         } else {
-          // Chip ring: blue with white rectangular notches
-          const angle  = Math.atan2(dy, dx);
-          const step   = (2 * Math.PI) / NOTCHES;
-          const mod    = ((angle % step) + step) % step;
-          const half   = NOTCH_W * step * 0.5;
-          const notch  = mod < half || mod > step - half;
-          color = notch ? WHITE : CHIP_BLUE;
+          // Chip ring with notches
+          const angle = Math.atan2(dy, dx);
+          const step  = (2 * Math.PI) / NOTCHES;
+          const mod   = ((angle % step) + step) % step;
+          const half  = NOTCH_W * step * 0.5;
+          fg = (mod < half || mod > step - half) ? WHITE : BLUE;
+          // blend ring edge to white background
+          r = Math.round(fg[0] * chipA + 255 * (1 - chipA));
+          g = Math.round(fg[1] * chipA + 255 * (1 - chipA));
+          b = Math.round(fg[2] * chipA + 255 * (1 - chipA));
         }
-
-        const finalA = chipA;
-        r = Math.round(color[0] * finalA + 255 * (1 - finalA));
-        g = Math.round(color[1] * finalA + 255 * (1 - finalA));
-        b = Math.round(color[2] * finalA + 255 * (1 - finalA));
-        a = Math.round(finalA * 255);
       }
 
-      data[idx]     = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
-      data[idx + 3] = a;
+      data[idx] = r; data[idx+1] = g; data[idx+2] = b; data[idx+3] = 255;
     }
   }
-
   return png;
 }
 
-const sizes = [
-  { size: 512, name: 'icon-512.png' },
-  { size: 192, name: 'icon-192.png' },
-  { size: 32,  name: 'favicon-32.png' },
-];
-
-for (const { size, name } of sizes) {
-  const png = renderChip(size);
-  const buf = PNG.sync.write(png);
+for (const [size, name] of [[512, 'icon-512.png'], [192, 'icon-192.png'], [32, 'favicon-32.png']]) {
+  const buf = PNG.sync.write(renderChip(size));
   fs.writeFileSync(path.join(OUT, name), buf);
   console.log(`✓ public/${name} (${buf.length} bytes)`);
 }

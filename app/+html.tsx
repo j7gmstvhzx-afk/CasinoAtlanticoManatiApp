@@ -11,8 +11,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
 
         {/* Icons & PWA */}
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="manifest" href="/app-manifest.json" />
         <meta name="theme-color" content="#1a2332" />
 
         {/* Google Fonts — Playfair Display (display/headers) + Inter (body) */}

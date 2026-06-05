@@ -15,7 +15,7 @@ import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { MachineRow } from '@/components/dashboard/MachineRow';
-import { C, card, money, mfrColor, shortMfr, useResponsive, MAX_CONTENT } from '@/components/dashboard/shared';
+import { C, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
@@ -195,7 +195,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
           </View>
           <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
             {filteredMachines.map(m => (
-              <MachineRow key={m.id} machine={m} onEdit={onEdit} showBank />
+              <MachineRow key={m.id} machine={m} onEdit={onEdit} />
             ))}
             {filteredMachines.length === 0 && (
               <RNText style={styles.empty}>No hay máquinas que cumplan con este filtro</RNText>
@@ -748,14 +748,11 @@ export default function DashboardScreen() {
   const periodLabel = useMemo(() => resolvePeriodLabel(machines), [machines]);
 
   const handleGenerateReport = () => {
-    const ok = generateFloorReport({
+    generateFloorReport({
       machines,
       bankGroups: getBankGroups(),
       periodLabel,
     });
-    if (!ok && typeof window !== 'undefined') {
-      window.alert('Permite las ventanas emergentes para generar el reporte.');
-    }
   };
 
   const showMetricToggle = tab === 'resumen' || tab === 'bancos';

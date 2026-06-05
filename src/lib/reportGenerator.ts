@@ -217,8 +217,8 @@ export function generateFloorReport({ machines, bankGroups, periodLabel }: Repor
         data.cell.styles.textColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
       }
-      // Hide raw number text in bar column
-      if (data.column.index === 6) data.cell.text = [''];
+      // Hide raw number text in bar column (body rows only — header keeps its title)
+      if (data.section !== 'head' && data.column.index === 6) data.cell.text = [''];
     },
     didDrawCell: (data) => {
       if (data.section === 'body' && data.column.index === 6

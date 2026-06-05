@@ -8,7 +8,6 @@ import type { SlotMachine } from '@/types/domain';
 type Props = {
   machine: SlotMachine;
   onEdit?: (m: SlotMachine) => void;
-  showBank?: boolean;
 };
 
 function MetricCol({ label, value, color }: { label: string; value: string; color: string }) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
@@ -89,7 +89,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
               return aPos - bPos;
             })
             .map(m => (
-              <MachineRow key={m.id} machine={m} onEdit={onEdit} showBank />
+              <MachineRow key={m.id} machine={m} onEdit={onEdit} />
             ))}
         </View>
       )}
@@ -98,10 +98,12 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
 }
 
 export function BankBrowser({ groups, rankMetric, onEdit }: Props) {
-  const sorted = [...groups].sort((a, b) =>
-    rankMetric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
-  );
-  const rankMap = new Map(sorted.map((g, i) => [g.bank, i + 1]));
+  const rankMap = useMemo(() => {
+    const sorted = [...groups].sort((a, b) =>
+      rankMetric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
+    );
+    return new Map(sorted.map((g, i) => [g.bank, i + 1]));
+  }, [groups, rankMetric]);
 
   return (
     <View style={{ gap: 12 }}>

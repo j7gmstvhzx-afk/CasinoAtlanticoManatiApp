@@ -16,6 +16,7 @@ import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { MachineRow } from '@/components/dashboard/MachineRow';
 import { C, card, money, mfrColor, shortMfr, useResponsive, MAX_CONTENT } from '@/components/dashboard/shared';
+import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
 type Metric = 'avgCoinIn' | 'avgWin';
@@ -731,16 +732,31 @@ export default function DashboardScreen() {
   const [metric, setMetric]        = useState<Metric>('avgCoinIn');
   const [editMachine, setEditMachine] = useState<SlotMachine | null>(null);
 
-  const init        = useSlotFloorStore(s => s.init);
-  const initialized = useSlotFloorStore(s => s.initialized);
-  const profile     = useAuthStore(s => s.profile);
-  const signOut     = useAuthStore(s => s.signOut);
+  const init          = useSlotFloorStore(s => s.init);
+  const initialized   = useSlotFloorStore(s => s.initialized);
+  const machines      = useSlotFloorStore(s => s.machines);
+  const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
+  const profile       = useAuthStore(s => s.profile);
+  const signOut       = useAuthStore(s => s.signOut);
 
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const gutter    = isDesktop ? 32 : width >= 640 ? 24 : 16;
 
   useEffect(() => { init(); }, [init]);
+
+  const periodLabel = useMemo(() => resolvePeriodLabel(machines), [machines]);
+
+  const handleGenerateReport = () => {
+    const ok = generateFloorReport({
+      machines,
+      bankGroups: getBankGroups(),
+      periodLabel,
+    });
+    if (!ok && typeof window !== 'undefined') {
+      window.alert('Permite las ventanas emergentes para generar el reporte.');
+    }
+  };
 
   const showMetricToggle = tab === 'resumen' || tab === 'bancos';
 
@@ -755,7 +771,10 @@ export default function DashboardScreen() {
             </View>
             <View>
               <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
-              {isDesktop && <RNText style={styles.brandSub}>Plataforma Operativa de Piso</RNText>}
+              <View style={styles.periodChip}>
+                <Ionicons name="calendar-outline" size={11} color={C.gold} />
+                <RNText style={styles.periodChipText}>Período: {periodLabel}</RNText>
+              </View>
             </View>
           </View>
           <View style={styles.topRight}>
@@ -772,6 +791,10 @@ export default function DashboardScreen() {
                 <RNText style={[styles.metricLabel, metric === 'avgWin' && styles.metricLabelActive]}>Win</RNText>
               </View>
             )}
+            <Pressable onPress={handleGenerateReport} style={styles.reportBtn}>
+              <Ionicons name="document-text-outline" size={15} color="#fff" />
+              {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
+            </Pressable>
             {profile && (
               <View style={[styles.roleBadge, profile.role === 'admin' ? styles.adminBadge : styles.viewerBadgeStyle]}>
                 <RNText style={[styles.roleText, profile.role === 'admin' ? styles.adminText : styles.viewerText]}>
@@ -837,9 +860,23 @@ const styles = StyleSheet.create({
   brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
   brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
   brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
+  periodChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fdf5e7', borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 2,
+    borderWidth: 1, borderColor: C.gold + '55',
+  },
+  periodChipText: { fontSize: 10, fontWeight: '700', color: '#b8863f', letterSpacing: 0.2 },
   logoMarkLg:     { width: 42, height: 42, borderRadius: 13 },
   logoMarkTextLg: { fontSize: 15 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.navy, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  reportBtnText: { fontSize: 12, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
   metricToggle:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
   metricLabel:    { fontSize: 11, fontWeight: '600', color: C.muted },
   metricLabelActive: { color: C.navy, fontWeight: '700' },

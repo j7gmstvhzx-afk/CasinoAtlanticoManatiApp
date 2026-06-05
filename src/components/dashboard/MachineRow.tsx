@@ -11,16 +11,28 @@ type Props = {
   showBank?: boolean;
 };
 
-export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
+function MetricCol({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <View style={styles.metricCol}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={[styles.metricValue, { color }]}>{value}</Text>
+    </View>
+  );
+}
+
+export function MachineRow({ machine: m, onEdit }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
   const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
-  // WWCJPR = Win Without Comisión de Juegos de Puerto Rico (Win después de deducir 50% CJPR)
+  // WWCJPR = Win Without Comisión de Juegos de PR (Avg Win after deducting 50% CJPR fee)
   const wwcjpr = m.avgWin != null ? m.avgWin * 0.50 : null;
 
   return (
     <View style={styles.row}>
 
-      {/* ID + location */}
+      {/* Manufacturer accent bar */}
+      <View style={[styles.accentBar, { backgroundColor: mfrBg }]} />
+
+      {/* Machine ID + location */}
       <View style={styles.idCol}>
         <Text style={styles.machineId}>{m.id}</Text>
         <Text style={styles.location}>{m.location}</Text>
@@ -29,45 +41,30 @@ export function MachineRow({ machine: m, onEdit, showBank = false }: Props) {
       {/* Game name + manufacturer pill */}
       <View style={styles.gameCol}>
         <Text style={styles.game} numberOfLines={2}>{m.game}</Text>
-        <View style={[styles.mfrPill, { backgroundColor: mfrBg + '18', borderColor: mfrBg + '55' }]}>
+        <View style={[styles.mfrPill, { backgroundColor: mfrBg + '15', borderColor: mfrBg + '45' }]}>
           <Text style={[styles.mfrText, { color: mfrBg }]}>{shortMfr(m.manufacturer)}</Text>
         </View>
       </View>
 
-      {/* Compact 2×2 metric grid */}
-      <View style={styles.metricsGrid}>
-        {/* Row 1: Coin-In + Win */}
-        <View style={styles.metricPair}>
-          <View style={styles.metricCell}>
-            <Text style={styles.metricTag}>Avg CI PD</Text>
-            <Text style={styles.metricValue}>{money(m.avgCoinIn ?? 0, 0)}</Text>
-          </View>
-          <View style={styles.metricCell}>
-            <Text style={styles.metricTag}>Avg Win PD</Text>
-            <Text style={[styles.metricValue, { color: C.green }]}>{money(m.avgWin ?? 0, 0)}</Text>
-          </View>
-        </View>
-        {/* Row 2: WWCJPR + Max Bet */}
-        <View style={styles.metricPair}>
-          {wwcjpr != null ? (
-            <View style={styles.metricCell}>
-              <Text style={styles.metricTag}>WWCJPR PD</Text>
-              <Text style={[styles.metricValue, { color: C.gold }]}>{money(wwcjpr, 0)}</Text>
-            </View>
-          ) : <View style={styles.metricCell} />}
-          {maxBet != null ? (
-            <View style={styles.metricCell}>
-              <Text style={styles.metricTag}>Max Bet</Text>
-              <Text style={[styles.metricValue, { color: C.navy3 }]}>{money(maxBet, 2)}</Text>
-            </View>
-          ) : <View style={styles.metricCell} />}
-        </View>
+      {/* Grouped metrics panel */}
+      <View style={styles.metricsPanel}>
+        <MetricCol label="CI PD"    value={money(m.avgCoinIn ?? 0, 0)} color={C.navy3}   />
+        <View style={styles.divider} />
+        <MetricCol label="WIN PD"   value={money(m.avgWin ?? 0, 0)}    color={C.green}   />
+        <View style={styles.divider} />
+        {wwcjpr != null
+          ? <MetricCol label="WWCJPR" value={money(wwcjpr, 0)} color="#b8863f" />
+          : <View style={styles.metricEmpty} />}
+        <View style={styles.divider} />
+        {maxBet != null
+          ? <MetricCol label="MAX BET" value={money(maxBet, 2)} color={C.navy} />
+          : <View style={styles.metricEmpty} />}
       </View>
 
       {/* Edit button */}
       {onEdit && (
         <Pressable style={styles.editBtn} onPress={() => onEdit(m)} hitSlop={8}>
-          <Ionicons name="pencil" size={14} color={C.navy} />
+          <Ionicons name="pencil" size={13} color={C.navy3} />
         </Pressable>
       )}
     </View>
@@ -78,31 +75,41 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    backgroundColor: C.card,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
-    gap: 10,
-    backgroundColor: C.card,
+    minHeight: 58,
+    overflow: 'hidden',
   },
+
+  accentBar: {
+    width: 3,
+    alignSelf: 'stretch',
+  },
+
   idCol: {
-    width: 50,
-    gap: 2,
+    width: 54,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    gap: 3,
   },
   machineId: {
     fontSize: 14,
     fontWeight: '800',
     color: C.navy,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   location: {
-    fontSize: 11,
-    color: C.gold,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    color: C.gold,
+    letterSpacing: 0.3,
   },
+
   gameCol: {
     flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     gap: 5,
   },
   game: {
@@ -113,52 +120,69 @@ const styles = StyleSheet.create({
   },
   mfrPill: {
     alignSelf: 'flex-start',
-    borderRadius: 5,
-    paddingHorizontal: 7,
+    borderRadius: 4,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderWidth: 1,
   },
   mfrText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
-  // 2×2 compact metric grid
-  metricsGrid: {
-    gap: 6,
-    alignItems: 'flex-end',
-  },
-  metricPair: {
-    flexDirection: 'row',
-    gap: 14,
-  },
-  metricCell: {
-    alignItems: 'flex-end',
-    minWidth: 68,
-  },
-  metricTag: {
     fontSize: 9,
     fontWeight: '700',
-    color: C.muted,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
+
+  // Metrics panel — all 4 metrics in one grouped background strip
+  metricsPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.track,
+    borderRadius: 8,
+    marginVertical: 8,
+    marginRight: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.border,
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 26,
+    backgroundColor: '#d0d8e4',
+    marginHorizontal: 2,
+  },
+  metricCol: {
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    minWidth: 66,
+  },
+  metricEmpty: {
+    minWidth: 66,
+    paddingHorizontal: 9,
+  },
+  metricLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: C.muted,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
   metricValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
-    color: C.navy3,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
 
   editBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     backgroundColor: '#eef1f5',
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 10,
   },
 });

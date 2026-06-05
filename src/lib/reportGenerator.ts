@@ -1,20 +1,28 @@
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { SlotMachine } from '@/types/domain';
 import type { BankGroup } from '@/store/useSlotFloorStore';
+
+// ── Palette (RGB tuples) ─────────────────────────────────────────────────────
+const NAVY:  [number, number, number] = [26, 35, 50];
+const NAVY2: [number, number, number] = [26, 79, 122];
+const GOLD:  [number, number, number] = [184, 134, 63];
+const GREEN: [number, number, number] = [31, 157, 87];
+const RED:   [number, number, number] = [192, 57, 43];
+const GRAY:  [number, number, number] = [138, 149, 165];
+const LIGHT: [number, number, number] = [247, 249, 252];
+const BORDER:[number, number, number] = [232, 236, 241];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const money = (n: number, d = 0) =>
   '$' + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-
 const pct = (n: number) => n.toFixed(1) + '%';
 
-function holdColor(hold: number): string {
-  if (hold < 7) return '#c0392b';     // bajo umbral (rojo)
-  if (hold <= 10) return '#b8863f';   // aceptable (dorado)
-  return '#1f9d57';                   // óptimo (verde)
+function holdColor(hold: number): [number, number, number] {
+  if (hold < 7) return RED;
+  if (hold <= 10) return GOLD;
+  return GREEN;
 }
-
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // ── Period label resolution ──────────────────────────────────────────────────
 export function resolvePeriodLabel(machines: SlotMachine[]): string {
@@ -27,328 +35,313 @@ export function resolvePeriodLabel(machines: SlotMachine[]): string {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
-// ── Report builder ───────────────────────────────────────────────────────────
 type ReportInput = {
   machines: SlotMachine[];
   bankGroups: BankGroup[];
   periodLabel: string;
 };
 
-function buildReportHtml({ machines, bankGroups, periodLabel }: ReportInput): string {
-  const withAvg = machines.filter(m => m.avgCoinIn != null && m.avgWin != null);
+// ── PDF builder ──────────────────────────────────────────────────────────────
+export function generateFloorReport({ machines, bankGroups, periodLabel }: ReportInput): boolean {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+  const pageW = doc.internal.pageSize.getWidth();   // 792
+  const pageH = doc.internal.pageSize.getHeight();  // 612
+  const margin = 40;
+  const contentW = pageW - margin * 2;
+
+  // ── Aggregates ──
+  const withAvg  = machines.filter(m => m.avgCoinIn != null && m.avgWin != null);
   const totalCI  = withAvg.reduce((s, m) => s + (m.avgCoinIn ?? 0), 0);
   const totalWin = withAvg.reduce((s, m) => s + (m.avgWin ?? 0), 0);
-  const totalWWCJPR = totalWin * 0.5;
-  const hold = totalCI > 0 ? (totalWin / totalCI) * 100 : 0;
-  const bankCount = bankGroups.length;
-  const avgPerMachineCI = withAvg.length ? totalCI / withAvg.length : 0;
+  const totalWW  = totalWin * 0.5;
+  const hold     = totalCI > 0 ? (totalWin / totalCI) * 100 : 0;
+  const avgPerMc = withAvg.length ? totalCI / withAvg.length : 0;
 
   const now = new Date();
-  const generated = now.toLocaleString('es-PR', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: 'numeric', minute: '2-digit',
+  const generated = 'Generado: ' + now.toLocaleString('es-PR', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 
-  // ── KPI cards ──
-  const kpis = [
-    { label: 'COIN-IN PD TOTAL', value: money(totalCI), sub: `${withAvg.length} máquinas activas`, accent: '#1a2332' },
-    { label: 'WIN PD TOTAL',     value: money(totalWin), sub: 'Ganancia bruta diaria', accent: '#1f9d57' },
-    { label: 'HOLD %',           value: pct(hold), sub: 'Rango aceptable (7-10%)', accent: '#b8863f' },
-    { label: 'WWCJPR PD',        value: money(totalWWCJPR), sub: 'Win neto tras 50% CJPR', accent: '#c0392b' },
-    { label: 'PROMEDIO POR MÁQ', value: money(avgPerMachineCI), sub: 'Coin-In PD por máquina', accent: '#2d6a6a' },
-  ];
-  const kpiHtml = kpis.map(k => `
-    <div class="kpi" style="border-left-color:${k.accent}">
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value" style="color:${k.accent}">${k.value}</div>
-      <div class="kpi-sub">${esc(k.sub)}</div>
-    </div>`).join('');
+  // ── Running header (every page) ──
+  function drawHeader() {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...NAVY);
+    doc.text('Casino Atlántico Manatí', margin, margin + 6);
 
-  // ── Bank table ──
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...GOLD);
+    doc.text('El Más Que Paga', margin, margin + 20);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...GRAY);
+    doc.text(`Reporte de piso de tragamonedas · ${periodLabel}`, margin, margin + 32);
+
+    // Right block
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...NAVY);
+    doc.text(periodLabel, pageW - margin, margin + 6, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text(generated, pageW - margin, margin + 20, { align: 'right' });
+    doc.text('Datos internos · Acceso restringido', pageW - margin, margin + 31, { align: 'right' });
+
+    // Navy rule
+    doc.setFillColor(...NAVY);
+    doc.rect(margin, margin + 40, contentW, 3, 'F');
+  }
+
+  // ── Footer (every page) ──
+  function drawFooter(pageNum: number, pageCount: number) {
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.5);
+    doc.line(margin, pageH - 28, pageW - margin, pageH - 28);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(174, 183, 196);
+    doc.text(`Casino Atlántico Manatí · ${periodLabel} · Confidencial`, margin, pageH - 16);
+    doc.text(`Página ${pageNum} de ${pageCount}`, pageW - margin, pageH - 16, { align: 'right' });
+  }
+
+  // ── KPI cards (page 1) ──
+  function drawKpis(y: number): number {
+    const kpis: Array<{ label: string; value: string; sub: string; accent: [number, number, number] }> = [
+      { label: 'COIN-IN PD TOTAL', value: money(totalCI), sub: `${withAvg.length} máquinas activas`, accent: NAVY },
+      { label: 'WIN PD TOTAL',     value: money(totalWin), sub: 'Ganancia bruta diaria', accent: GREEN },
+      { label: 'HOLD %',           value: pct(hold), sub: 'Rango aceptable 7-10%', accent: GOLD },
+      { label: 'WWCJPR PD',        value: money(totalWW), sub: 'Win neto tras 50% CJPR', accent: RED },
+      { label: 'PROMEDIO / MÁQ',   value: money(avgPerMc), sub: 'Coin-In PD por máquina', accent: NAVY2 },
+    ];
+    const gap = 10;
+    const cardW = (contentW - gap * (kpis.length - 1)) / kpis.length;
+    const cardH = 66;
+    kpis.forEach((k, i) => {
+      const x = margin + i * (cardW + gap);
+      doc.setFillColor(...LIGHT);
+      doc.setDrawColor(...BORDER);
+      doc.roundedRect(x, y, cardW, cardH, 5, 5, 'FD');
+      // accent left bar
+      doc.setFillColor(...k.accent);
+      doc.rect(x, y + 4, 4, cardH - 8, 'F');
+      // label
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(...GRAY);
+      doc.text(k.label, x + 12, y + 16);
+      // value
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(...k.accent);
+      doc.text(k.value, x + 12, y + 38);
+      // sub
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY);
+      doc.text(k.sub, x + 12, y + 54);
+    });
+    return y + cardH;
+  }
+
+  function sectionTitle(text: string, y: number): number {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...NAVY);
+    doc.text(text, margin, y);
+    return y + 6;
+  }
+
+  // ════════════════════════ PAGE 1 ════════════════════════
+  drawHeader();
+  let y = margin + 58;
+  y = sectionTitle(`Métricas del período — ${periodLabel}`, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+  doc.text(
+    `Promedios diarios (PD = Por Día) sobre ${withAvg.length} máquinas con datos del período.`,
+    margin, y + 8,
+  );
+  y = drawKpis(y + 18) + 24;
+
+  // Bank table
+  y = sectionTitle(`Detalle por banco — ${periodLabel}`, y) + 8;
+
   const maxBankCI = bankGroups.reduce((m, g) => Math.max(m, g.totalCoinIn), 0) || 1;
-  const bankRows = bankGroups.map((g, i) => {
+  const bankBody = bankGroups.map(g => {
     const bHold = g.totalCoinIn > 0 ? (g.totalWin / g.totalCoinIn) * 100 : 0;
-    const barPct = Math.max((g.totalCoinIn / maxBankCI) * 100, 1);
-    return `
-      <tr class="${i % 2 ? 'alt' : ''}">
-        <td class="bank-cell">Banco ${esc(g.bank.padStart(2, '0'))}</td>
-        <td class="num">${g.machines.length}</td>
-        <td class="num bold">${money(g.totalCoinIn)}</td>
-        <td class="num">${money(g.totalWin)}</td>
-        <td class="num gold">${money(g.totalWin * 0.5)}</td>
-        <td class="num" style="color:${holdColor(bHold)};font-weight:700">${pct(bHold)}</td>
-        <td class="bar-cell">
-          <div class="bar-track"><div class="bar-fill" style="width:${barPct}%"></div></div>
-        </td>
-      </tr>`;
-  }).join('');
+    return [
+      `Banco ${g.bank.padStart(2, '0')}`,
+      String(g.machines.length),
+      money(g.totalCoinIn),
+      money(g.totalWin),
+      money(g.totalWin * 0.5),
+      pct(bHold),
+      g.totalCoinIn, // raw value for bar column
+    ];
+  });
+  bankBody.push([
+    'TOTAL', String(withAvg.length), money(totalCI), money(totalWin), money(totalWW), pct(hold), 0,
+  ]);
 
-  // ── Manufacturer table ──
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin, top: margin + 58, bottom: 40 },
+    head: [['Banco', 'Máqs', 'Coin-In PD', 'Win PD', 'WWCJPR PD', 'Hold %', 'Coin-In relativo']],
+    body: bankBody,
+    theme: 'striped',
+    styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, textColor: NAVY },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'right' },
+      2: { halign: 'right', fontStyle: 'bold' },
+      3: { halign: 'right' },
+      4: { halign: 'right', textColor: GOLD, fontStyle: 'bold' },
+      5: { halign: 'right', fontStyle: 'bold' },
+      6: { cellWidth: 170 },
+    },
+    didParseCell: (data) => {
+      // Color hold % column
+      if (data.section === 'body' && data.column.index === 5) {
+        const raw = parseFloat(String(data.cell.raw).replace('%', ''));
+        if (!isNaN(raw)) data.cell.styles.textColor = holdColor(raw);
+      }
+      // TOTAL row styling
+      if (data.section === 'body' && data.row.index === bankBody.length - 1) {
+        data.cell.styles.fillColor = NAVY;
+        data.cell.styles.textColor = [255, 255, 255];
+        data.cell.styles.fontStyle = 'bold';
+      }
+      // Hide raw number text in bar column
+      if (data.column.index === 6) data.cell.text = [''];
+    },
+    didDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index === 6
+          && data.row.index < bankGroups.length) {
+        const raw = bankBody[data.row.index][6] as number;
+        const w = Math.max((raw / maxBankCI) * (data.cell.width - 8), 1);
+        const bx = data.cell.x + 4;
+        const by = data.cell.y + (data.cell.height - 10) / 2;
+        doc.setFillColor(238, 241, 245);
+        doc.roundedRect(bx, by, data.cell.width - 8, 10, 2, 2, 'F');
+        doc.setFillColor(...NAVY2);
+        doc.roundedRect(bx, by, w, 10, 2, 2, 'F');
+      }
+    },
+  });
+
+  // Hold legend under bank table
+  const afterBankY = (doc as any).lastAutoTable.finalY + 14;
+  if (afterBankY < pageH - 60) {
+    const legendY = afterBankY;
+    const items: Array<[string, [number, number, number]]> = [
+      ['Hold óptimo (>10%)', GREEN], ['Aceptable (7-10%)', GOLD], ['Bajo umbral (<7%)', RED],
+    ];
+    let lx = margin;
+    doc.setFontSize(8);
+    items.forEach(([txt, col]) => {
+      doc.setFillColor(...col);
+      doc.roundedRect(lx, legendY - 7, 8, 8, 1, 1, 'F');
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(txt, lx + 12, legendY);
+      lx += doc.getTextWidth(txt) + 34;
+    });
+  }
+
+  // ════════════════════════ PAGE 2 ════════════════════════
+  doc.addPage();
+  drawHeader();
+  y = margin + 58;
+
+  // Manufacturer table
+  y = sectionTitle('Rendimiento por fabricante', y) + 8;
   const mfrMap = new Map<string, { count: number; ci: number; win: number }>();
   for (const m of machines) {
     const e = mfrMap.get(m.manufacturer) ?? { count: 0, ci: 0, win: 0 };
     e.count++; e.ci += m.avgCoinIn ?? 0; e.win += m.avgWin ?? 0;
     mfrMap.set(m.manufacturer, e);
   }
-  const mfrRows = [...mfrMap.entries()]
-    .sort((a, b) => b[1].ci - a[1].ci)
-    .map(([mfr, e], i) => {
-      const mHold = e.ci > 0 ? (e.win / e.ci) * 100 : 0;
-      return `
-        <tr class="${i % 2 ? 'alt' : ''}">
-          <td class="bank-cell">${esc(mfr)}</td>
-          <td class="num">${e.count}</td>
-          <td class="num bold">${money(e.ci)}</td>
-          <td class="num">${money(e.win)}</td>
-          <td class="num gold">${money(e.win * 0.5)}</td>
-          <td class="num" style="color:${holdColor(mHold)};font-weight:700">${pct(mHold)}</td>
-        </tr>`;
-    }).join('');
+  const mfrBody = [...mfrMap.entries()].sort((a, b) => b[1].ci - a[1].ci).map(([mfr, e]) => {
+    const mHold = e.ci > 0 ? (e.win / e.ci) * 100 : 0;
+    return [mfr, String(e.count), money(e.ci), money(e.win), money(e.win * 0.5), pct(mHold)];
+  });
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin, top: margin + 58, bottom: 40 },
+    head: [['Fabricante', 'Máqs', 'Coin-In PD', 'Win PD', 'WWCJPR PD', 'Hold %']],
+    body: mfrBody,
+    theme: 'striped',
+    styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, textColor: NAVY },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'right' }, 2: { halign: 'right', fontStyle: 'bold' },
+      3: { halign: 'right' }, 4: { halign: 'right', textColor: GOLD, fontStyle: 'bold' },
+      5: { halign: 'right', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const raw = parseFloat(String(data.cell.raw).replace('%', ''));
+        if (!isNaN(raw)) data.cell.styles.textColor = holdColor(raw);
+      }
+    },
+  });
 
-  // ── Top machines table ──
-  const topMachines = [...withAvg]
+  // Top machines table
+  y = (doc as any).lastAutoTable.finalY + 22;
+  y = sectionTitle('Top 15 máquinas por Coin-In PD', y) + 8;
+  const topBody = [...withAvg]
     .sort((a, b) => (b.avgCoinIn ?? 0) - (a.avgCoinIn ?? 0))
-    .slice(0, 15);
-  const topRows = topMachines.map((m, i) => {
-    const mHold = (m.avgCoinIn ?? 0) > 0 ? ((m.avgWin ?? 0) / (m.avgCoinIn ?? 1)) * 100 : 0;
-    return `
-      <tr class="${i % 2 ? 'alt' : ''}">
-        <td class="rank">${i + 1}</td>
-        <td class="bold">${esc(m.id)}</td>
-        <td class="gold-text">${esc(m.location)}</td>
-        <td>${esc(m.game)}</td>
-        <td class="num bold">${money(m.avgCoinIn ?? 0)}</td>
-        <td class="num">${money(m.avgWin ?? 0)}</td>
-        <td class="num gold">${money((m.avgWin ?? 0) * 0.5)}</td>
-        <td class="num" style="color:${holdColor(mHold)};font-weight:700">${pct(mHold)}</td>
-      </tr>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<title>Reporte de Piso — Casino Atlántico Manatí — ${esc(periodLabel)}</title>
-<style>
-  @page { size: letter landscape; margin: 14mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #1a2332; background: #fff; font-size: 12px; line-height: 1.4;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }
-  .page { padding: 0 4px; }
-  .page-break { page-break-before: always; }
-
-  /* Header band */
-  header { display: flex; justify-content: space-between; align-items: flex-start; }
-  .brand-title { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #1a2332; }
-  .brand-slogan { font-size: 12px; font-weight: 700; color: #b8863f; margin-top: 2px; }
-  .brand-sub { font-size: 12px; color: #6b7a8d; margin-top: 2px; }
-  .header-right { text-align: right; }
-  .period-big { font-size: 22px; font-weight: 800; color: #1a2332; }
-  .header-meta { font-size: 10px; color: #8a95a5; margin-top: 4px; line-height: 1.5; }
-  .rule { height: 4px; background: #1a2332; border-radius: 2px; margin: 12px 0 22px; }
-
-  /* Section titles */
-  .section-title { font-size: 15px; font-weight: 800; color: #1a2332; margin: 22px 0 12px; }
-  .section-title:first-of-type { margin-top: 0; }
-  .section-sub { font-size: 11px; color: #8a95a5; margin: -8px 0 12px; }
-
-  /* KPI cards */
-  .kpi-row { display: flex; gap: 12px; margin-bottom: 8px; }
-  .kpi {
-    flex: 1; background: #f7f9fc; border: 1px solid #e8ecf1;
-    border-left: 5px solid #1a2332; border-radius: 8px; padding: 12px 14px;
-  }
-  .kpi-label { font-size: 9px; font-weight: 700; color: #8a95a5; letter-spacing: 0.8px; }
-  .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin: 4px 0; }
-  .kpi-sub { font-size: 10px; color: #8a95a5; }
-
-  /* Tables */
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    background: #1a2332; color: #fff; font-size: 10px; font-weight: 700;
-    letter-spacing: 0.5px; text-transform: uppercase; padding: 9px 10px; text-align: left;
-  }
-  thead th.num { text-align: right; }
-  tbody td { padding: 7px 10px; font-size: 11.5px; border-bottom: 1px solid #eef1f5; }
-  tbody tr.alt { background: #f7f9fc; }
-  tbody tr.total td { background: #1a2332; color: #fff; font-weight: 800; border: none; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.bold { font-weight: 700; }
-  td.gold { color: #b8863f; font-weight: 700; }
-  td.gold-text { color: #b8863f; font-weight: 700; }
-  td.bank-cell { font-weight: 700; color: #1a2332; }
-  td.rank { color: #8a95a5; font-weight: 700; width: 24px; }
-
-  /* Bars inside table */
-  td.bar-cell { width: 200px; padding-right: 14px; }
-  .bar-track { background: #eef1f5; border-radius: 4px; height: 16px; overflow: hidden; }
-  .bar-fill { background: #1a4f7a; height: 100%; border-radius: 4px; }
-
-  /* Legend */
-  .legend { display: flex; gap: 18px; margin-top: 10px; font-size: 10px; color: #6b7a8d; }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-
-  /* Footer */
-  footer {
-    margin-top: 26px; padding-top: 10px; border-top: 1px solid #e8ecf1;
-    display: flex; justify-content: space-between; font-size: 10px; color: #aeb7c4;
-  }
-
-  @media print {
-    .no-print { display: none !important; }
-    .section-block { page-break-inside: avoid; }
-  }
-  .print-btn {
-    position: fixed; top: 16px; right: 16px; z-index: 99;
-    background: #1a2332; color: #fff; border: none; border-radius: 10px;
-    padding: 12px 20px; font-size: 14px; font-weight: 700; cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  }
-</style>
-</head>
-<body>
-  <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-
-  <div class="page">
-    <!-- Header -->
-    <header>
-      <div>
-        <div class="brand-title">Casino Atlántico Manatí</div>
-        <div class="brand-slogan">El Más Que Paga</div>
-        <div class="brand-sub">Reporte de piso de tragamonedas · ${esc(periodLabel)}</div>
-      </div>
-      <div class="header-right">
-        <div class="period-big">${esc(periodLabel)}</div>
-        <div class="header-meta">
-          Generado: ${esc(generated)}<br>
-          Datos internos · Acceso restringido
-        </div>
-      </div>
-    </header>
-    <div class="rule"></div>
-
-    <!-- KPIs -->
-    <div class="section-title">Métricas del período — ${esc(periodLabel)}</div>
-    <div class="section-sub">Promedios diarios (PD = Por Día) calculados sobre ${withAvg.length} máquinas con datos del período.</div>
-    <div class="kpi-row">${kpiHtml}</div>
-
-    <!-- Bank table -->
-    <div class="section-block">
-      <div class="section-title">Detalle por banco — ${esc(periodLabel)}</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Banco</th>
-            <th class="num">Máqs</th>
-            <th class="num">Coin-In PD</th>
-            <th class="num">Win PD</th>
-            <th class="num">WWCJPR PD</th>
-            <th class="num">Hold %</th>
-            <th>Coin-In relativo</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${bankRows}
-          <tr class="total">
-            <td>TOTAL</td>
-            <td class="num">${withAvg.length}</td>
-            <td class="num">${money(totalCI)}</td>
-            <td class="num">${money(totalWin)}</td>
-            <td class="num">${money(totalWWCJPR)}</td>
-            <td class="num">${pct(hold)}</td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="legend">
-        <span><i class="dot" style="background:#1f9d57"></i> Hold óptimo (&gt;10%)</span>
-        <span><i class="dot" style="background:#b8863f"></i> Aceptable (7-10%)</span>
-        <span><i class="dot" style="background:#c0392b"></i> Bajo umbral (&lt;7%)</span>
-      </div>
-    </div>
-    <footer>
-      <span>Casino Atlántico Manatí · ${esc(periodLabel)} · Confidencial</span>
-      <span>Página 1</span>
-    </footer>
-  </div>
-
-  <!-- Page 2: Manufacturers + Top machines -->
-  <div class="page page-break">
-    <header>
-      <div>
-        <div class="brand-title">Casino Atlántico Manatí</div>
-        <div class="brand-sub">Detalle por fabricante y top máquinas · ${esc(periodLabel)}</div>
-      </div>
-      <div class="header-right">
-        <div class="header-meta">Generado: ${esc(generated)}</div>
-      </div>
-    </header>
-    <div class="rule"></div>
-
-    <div class="section-block">
-      <div class="section-title">Rendimiento por fabricante</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Fabricante</th>
-            <th class="num">Máqs</th>
-            <th class="num">Coin-In PD</th>
-            <th class="num">Win PD</th>
-            <th class="num">WWCJPR PD</th>
-            <th class="num">Hold %</th>
-          </tr>
-        </thead>
-        <tbody>${mfrRows}</tbody>
-      </table>
-    </div>
-
-    <div class="section-block">
-      <div class="section-title">Top 15 máquinas por Coin-In PD</div>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>ID</th>
-            <th>Ubicación</th>
-            <th>Juego</th>
-            <th class="num">Coin-In PD</th>
-            <th class="num">Win PD</th>
-            <th class="num">WWCJPR PD</th>
-            <th class="num">Hold %</th>
-          </tr>
-        </thead>
-        <tbody>${topRows}</tbody>
-      </table>
-    </div>
-
-    <footer>
-      <span>Casino Atlántico Manatí · ${esc(periodLabel)} · Confidencial</span>
-      <span>Página 2</span>
-    </footer>
-  </div>
-
-  <script>
-    // Auto-open print dialog shortly after load for convenience
-    window.addEventListener('load', function () {
-      setTimeout(function () { try { window.print(); } catch (e) {} }, 400);
+    .slice(0, 15)
+    .map((m, i) => {
+      const mHold = (m.avgCoinIn ?? 0) > 0 ? ((m.avgWin ?? 0) / (m.avgCoinIn ?? 1)) * 100 : 0;
+      return [
+        String(i + 1), m.id, m.location, m.game,
+        money(m.avgCoinIn ?? 0), money(m.avgWin ?? 0), money((m.avgWin ?? 0) * 0.5), pct(mHold),
+      ];
     });
-  </script>
-</body>
-</html>`;
-}
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin, top: margin + 58, bottom: 40 },
+    head: [['#', 'ID', 'Ubicación', 'Juego', 'Coin-In PD', 'Win PD', 'WWCJPR PD', 'Hold %']],
+    body: topBody,
+    theme: 'striped',
+    styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, textColor: NAVY },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT },
+    columnStyles: {
+      0: { textColor: GRAY, fontStyle: 'bold', cellWidth: 24 },
+      1: { fontStyle: 'bold' },
+      2: { textColor: GOLD, fontStyle: 'bold' },
+      4: { halign: 'right', fontStyle: 'bold' },
+      5: { halign: 'right' },
+      6: { halign: 'right', textColor: GOLD, fontStyle: 'bold' },
+      7: { halign: 'right', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 7) {
+        const raw = parseFloat(String(data.cell.raw).replace('%', ''));
+        if (!isNaN(raw)) data.cell.styles.textColor = holdColor(raw);
+      }
+    },
+  });
 
-// ── Public entry point ───────────────────────────────────────────────────────
-export function generateFloorReport(input: ReportInput): boolean {
-  const html = buildReportHtml(input);
-  if (typeof window === 'undefined' || !window.open) return false;
-  const win = window.open('', '_blank');
-  if (!win) return false;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  // ── Footers with page numbers ──
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    drawFooter(p, pageCount);
+  }
+
+  // ── Download ──
+  const safePeriod = periodLabel.replace(/[^a-zA-Z0-9]+/g, '_');
+  doc.save(`Reporte_Piso_${safePeriod}.pdf`);
   return true;
 }

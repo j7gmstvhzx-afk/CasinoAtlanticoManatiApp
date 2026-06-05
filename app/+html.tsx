@@ -9,6 +9,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         <title>Casino Atlántico Manatí — Piso de Máquinas</title>
 
+        {/* Icons & PWA */}
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1a2332" />
+
         {/* Google Fonts — Playfair Display (display/headers) + Inter (body) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
-import { palette } from '@/theme';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function RootLayout() {
@@ -13,20 +12,20 @@ export default function RootLayout() {
   const session = useAuthStore(s => s.session);
 
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(palette.midnight).catch(() => {});
+    SystemUI.setBackgroundColorAsync('#f8f9fa').catch(() => {});
     init();
   }, [init]);
 
   if (loading) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.midnight }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <Stack
           screenOptions={{
             headerShown:  false,
-            contentStyle: { backgroundColor: palette.midnight },
+            contentStyle: { backgroundColor: '#f8f9fa' },
             animation:    'fade',
           }}
         >

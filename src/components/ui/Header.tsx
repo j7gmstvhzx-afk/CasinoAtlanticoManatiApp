@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.md,
   },
-  side: { width: 64 },
+  side:   { width: 64 },
   center: { flex: 1, alignItems: 'center' },
   iconBtn: {
     width: 40,
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.05)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border.default,
   },

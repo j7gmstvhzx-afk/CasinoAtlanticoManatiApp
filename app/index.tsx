@@ -14,6 +14,7 @@ import { HBars, type HBarItem } from '@/components/dashboard/HBars';
 import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
+import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { MachineRow } from '@/components/dashboard/MachineRow';
 import { C, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
@@ -24,6 +25,7 @@ type Metric = 'avgCoinIn' | 'avgWin';
 const TABS = [
   { key: 'resumen',      label: 'Resumen' },
   { key: 'bancos',       label: 'Bancos' },
+  { key: 'comparativa',  label: 'Comparativa vs 2025' },
   { key: 'fabricantes',  label: 'Fabricantes' },
   { key: 'apuestas',     label: 'Apuestas' },
   { key: 'cambios',      label: 'Cambios' },
@@ -210,6 +212,19 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
         </ScrollView>
       )}
     </View>
+  );
+}
+
+// ── Section: Comparativa vs 2025 ──────────────────────────────────────────────
+
+function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number }) {
+  const machines = useSlotFloorStore(s => s.machines);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <Comparativa2025 machines={machines} metric={metric} />
+      <RNText style={styles.footer}>Casino Atlántico Manatí · Comparativa de rendimiento por posición vs. snapshot 2025</RNText>
+    </ScrollView>
   );
 }
 
@@ -755,7 +770,7 @@ export default function DashboardScreen() {
     });
   };
 
-  const showMetricToggle = tab === 'resumen' || tab === 'bancos';
+  const showMetricToggle = tab === 'resumen' || tab === 'bancos' || tab === 'comparativa';
 
   return (
     <View style={styles.root}>
@@ -818,6 +833,7 @@ export default function DashboardScreen() {
         <>
           {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
           {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
+          {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
           {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
           {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
           {tab === 'cambios'     && <CambiosSection gutter={gutter} />}

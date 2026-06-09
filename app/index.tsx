@@ -779,7 +779,9 @@ export default function DashboardScreen() {
         <View style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 14 : 10 }]}>
           <View style={styles.brandRow}>
             <View style={[styles.logoMark, isDesktop && styles.logoMarkLg]}>
-              <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
+              <View style={[styles.logoChipRing, isDesktop && styles.logoChipRingLg]}>
+                <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
+              </View>
             </View>
             <View>
               <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
@@ -866,10 +868,18 @@ const styles = StyleSheet.create({
   },
   brandRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 30, height: 30, borderRadius: 9, backgroundColor: C.navy,
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#2457b5',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  logoMarkLg:     { width: 44, height: 44, borderRadius: 22 },
+  logoChipRing: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
     alignItems: 'center', justifyContent: 'center',
   },
-  logoMarkText:   { fontSize: 12, fontWeight: '800', color: C.gold, letterSpacing: 0.5 },
+  logoChipRingLg: { width: 32, height: 32, borderRadius: 16 },
+  logoMarkText:   { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
   brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
   brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
   brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
@@ -881,8 +891,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.gold + '55',
   },
   periodChipText: { fontSize: 10, fontWeight: '700', color: '#b8863f', letterSpacing: 0.2 },
-  logoMarkLg:     { width: 42, height: 42, borderRadius: 13 },
-  logoMarkTextLg: { fontSize: 15 },
+  logoMarkTextLg: { fontSize: 12 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

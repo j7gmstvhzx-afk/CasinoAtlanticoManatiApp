@@ -84,7 +84,7 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* KPI grid — auto-reflows across screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas"  value={String(floorStats.total)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
+        <StatCard label="Total Máquinas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
         <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio apostado por máquina al día" />
         <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia del casino por máquina al día" />
         <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win ÷ Coin-In · retención del casino" />

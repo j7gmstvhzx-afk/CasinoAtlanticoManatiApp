@@ -369,7 +369,10 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   },
 
   getBankRanking(metric) {
-    const groups = buildBankGroups(get().machines);
+    // Banks whose machines have no coin-in/win yet (pending data entry)
+    // would rank as $0 worst — exclude them until they have data.
+    const groups = buildBankGroups(get().machines)
+      .filter(g => g.machines.some(m => m.avgCoinIn != null && m.avgWin != null));
     const sorted = [...groups].sort((a, b) =>
       metric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
     );

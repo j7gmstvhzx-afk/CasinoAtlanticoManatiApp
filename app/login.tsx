@@ -10,13 +10,17 @@ import { useAuthStore } from '@/store/useAuthStore';
 const NAVY   = '#1a2332';
 const NAVY2  = '#243042';
 const NAVY3  = '#0f1922';
-const TEAL   = '#1d4e5e';
 const GOLD   = '#c89b63';
 const WHITE  = '#ffffff';
 const OFFWHITE = '#f7f9fc';
 const DARK_TEXT = '#1a2332';
 const MUTED_TEXT = '#6b7a8d';
 const BORDER = '#dde3ec';
+
+// Casino Atlántico Manatí — brand blue from the official chip logo
+const CHIP_BLUE      = '#2457b5';
+const CHIP_BLUE_DARK = '#1a3e96';
+const CHIP_BLUE_MID  = '#3568c8';
 
 const FEATURES = [
   { icon: '📊', text: '285 máquinas en 44 bancos monitoreadas en tiempo real' },
@@ -64,10 +68,12 @@ export default function LoginScreen() {
           <View style={styles.bgCircle1} pointerEvents="none" />
           <View style={styles.bgCircle2} pointerEvents="none" />
 
-          {/* Logo row */}
+          {/* Logo row — chip icon + wordmark */}
           <View style={styles.logoRow}>
             <View style={styles.logoMark}>
-              <Text style={styles.logoText}>CA</Text>
+              <View style={styles.logoChipRing}>
+                <Text style={styles.logoText}>CA</Text>
+              </View>
             </View>
             <View>
               <Text style={styles.logoName}>Casino Atlántico</Text>
@@ -189,7 +195,7 @@ const styles = StyleSheet.create({
 
   // ── Brand panel ──────────────────────────────────────────────────────────────
   brand: {
-    backgroundColor: NAVY,
+    backgroundColor: CHIP_BLUE,
     paddingHorizontal: 32,
     paddingVertical: 48,
     justifyContent: 'center',
@@ -205,55 +211,66 @@ const styles = StyleSheet.create({
 
   bgCircle1: {
     position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    backgroundColor: TEAL + '20',
-    top: -120,
-    right: -120,
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    backgroundColor: CHIP_BLUE_MID + '30',
+    top: -140,
+    right: -140,
   },
   bgCircle2: {
     position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: GOLD + '0c',
-    bottom: -60,
-    left: -60,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: CHIP_BLUE_DARK + '55',
+    bottom: -80,
+    left: -80,
   },
 
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
+  // Outer chip ring
   logoMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: GOLD + '22',
-    borderWidth: 1,
-    borderColor: GOLD + '55',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Inner chip ring
+  logoChipRing: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.30)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
-    color: GOLD,
-    letterSpacing: 1,
+    color: WHITE,
+    letterSpacing: 1.2,
   },
   logoName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: WHITE,
   },
   logoCity: {
     fontSize: 9,
     fontWeight: '700',
-    color: GOLD + 'aa',
+    color: 'rgba(255,255,255,0.65)',
     letterSpacing: 1.5,
-    marginTop: 1,
+    marginTop: 2,
   },
 
   heroBlock: { gap: 12 },
@@ -363,7 +380,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inputFocus: {
-    borderColor: NAVY,
+    borderColor: CHIP_BLUE,
   },
   inputError: {
     borderColor: '#e74c3c55',
@@ -386,12 +403,12 @@ const styles = StyleSheet.create({
   btn: {
     paddingVertical: 15,
     borderRadius: 12,
-    backgroundColor: NAVY,
+    backgroundColor: CHIP_BLUE,
     alignItems: 'center',
     marginTop: 4,
   },
   btnBusy: {
-    backgroundColor: NAVY2,
+    backgroundColor: CHIP_BLUE_DARK,
   },
   btnPressed: {
     opacity: 0.85,

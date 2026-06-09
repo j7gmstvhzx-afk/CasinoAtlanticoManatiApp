@@ -14,6 +14,7 @@ import { HBars, type HBarItem } from '@/components/dashboard/HBars';
 import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
+import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { MachineRow } from '@/components/dashboard/MachineRow';
 import { C, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
@@ -24,6 +25,7 @@ type Metric = 'avgCoinIn' | 'avgWin';
 const TABS = [
   { key: 'resumen',      label: 'Resumen' },
   { key: 'bancos',       label: 'Bancos' },
+  { key: 'comparativa',  label: 'Comparativa vs 2025' },
   { key: 'fabricantes',  label: 'Fabricantes' },
   { key: 'apuestas',     label: 'Apuestas' },
   { key: 'cambios',      label: 'Cambios' },
@@ -45,7 +47,8 @@ const CHANGE_COLORS: Record<string, string> = {
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
 function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const machines    = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
 
@@ -143,6 +146,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
     if (!activeFilter) return [];
     return [...machines]
       .filter(m => {
+        if (!m.active) return false;
         const val = activeFilter.type === 'coinIn' ? (m.avgCoinIn ?? 0) : (m.avgWin ?? 0);
         return val > 0 && val < activeFilter.max;
       })
@@ -213,10 +217,25 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
   );
 }
 
+// ── Section: Comparativa vs 2025 ──────────────────────────────────────────────
+
+function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number }) {
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <Comparativa2025 machines={machines} metric={metric} />
+      <RNText style={styles.footer}>Casino Atlántico Manatí · Comparativa de rendimiento por posición vs. snapshot 2025</RNText>
+    </ScrollView>
+  );
+}
+
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
 function FabricantesSection({ gutter }: { gutter: number }) {
-  const machines   = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const floorStats = useSlotFloorStore(s => s.floorStats);
 
   const rows = useMemo(() => {
@@ -396,7 +415,8 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
 }
 
 function ApuestasSection({ gutter }: { gutter: number }) {
-  const machines = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const [betView, setBetView] = useState<'min' | 'max'>('min');
   const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
 
@@ -749,13 +769,13 @@ export default function DashboardScreen() {
 
   const handleGenerateReport = () => {
     generateFloorReport({
-      machines,
+      machines: machines.filter(m => m.active),
       bankGroups: getBankGroups(),
       periodLabel,
     });
   };
 
-  const showMetricToggle = tab === 'resumen' || tab === 'bancos';
+  const showMetricToggle = tab === 'resumen' || tab === 'bancos' || tab === 'comparativa';
 
   return (
     <View style={styles.root}>
@@ -764,7 +784,9 @@ export default function DashboardScreen() {
         <View style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 14 : 10 }]}>
           <View style={styles.brandRow}>
             <View style={[styles.logoMark, isDesktop && styles.logoMarkLg]}>
-              <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
+              <View style={[styles.logoChipRing, isDesktop && styles.logoChipRingLg]}>
+                <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
+              </View>
             </View>
             <View>
               <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
@@ -818,6 +840,7 @@ export default function DashboardScreen() {
         <>
           {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
           {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
+          {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
           {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
           {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
           {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
@@ -850,10 +873,18 @@ const styles = StyleSheet.create({
   },
   brandRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 30, height: 30, borderRadius: 9, backgroundColor: C.navy,
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#2457b5',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  logoMarkLg:     { width: 44, height: 44, borderRadius: 22 },
+  logoChipRing: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
     alignItems: 'center', justifyContent: 'center',
   },
-  logoMarkText:   { fontSize: 12, fontWeight: '800', color: C.gold, letterSpacing: 0.5 },
+  logoChipRingLg: { width: 32, height: 32, borderRadius: 16 },
+  logoMarkText:   { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
   brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
   brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
   brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
@@ -865,8 +896,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.gold + '55',
   },
   periodChipText: { fontSize: 10, fontWeight: '700', color: '#b8863f', letterSpacing: 0.2 },
-  logoMarkLg:     { width: 42, height: 42, borderRadius: 13 },
-  logoMarkTextLg: { fontSize: 15 },
+  logoMarkTextLg: { fontSize: 12 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

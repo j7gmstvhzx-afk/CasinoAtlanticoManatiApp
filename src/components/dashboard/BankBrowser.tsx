@@ -37,9 +37,9 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 640;
 
-  // Show total Coin-In PD and total Win PD for the whole bank
-  const totalCILabel = isWide ? 'Total Coin-In PD del Banco' : 'Total CI PD';
-  const totalWinLabel = isWide ? 'Total Win PD del Banco' : 'Total Win PD';
+  // Headline metrics: Avg Coin-In / Avg Win PER MACHINE — what actually ranks the bank
+  const avgCILabel  = isWide ? 'Avg Coin-In PD del Banco' : 'Avg CI PD/máq';
+  const avgWinLabel = isWide ? 'Avg Win PD del Banco' : 'Avg Win PD/máq';
 
   return (
     <View style={[styles.card, ri && rank <= 3 && styles.cardTop]}>
@@ -51,26 +51,26 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
           <Text style={styles.bankCount}>{group.machines.length} máqs</Text>
         </View>
 
-        {/* Center: Total Coin-In PD + Total Win PD */}
+        {/* Center: Avg Coin-In PD + Avg Win PD (per machine — the ranking metrics) */}
         <View style={styles.metricsBlock}>
           <View style={styles.metricItem}>
-            <Text style={styles.metricValue}>{money(group.totalCoinIn, 0)}</Text>
-            <Text style={styles.metricLabel}>{totalCILabel}</Text>
+            <Text style={styles.metricValue}>{money(group.avgCoinIn, 0)}</Text>
+            <Text style={styles.metricLabel}>{avgCILabel}</Text>
           </View>
           <View style={[styles.metricItem, styles.metricDivider]}>
-            <Text style={[styles.metricValue, styles.metricValueWin]}>{money(group.totalWin, 0)}</Text>
-            <Text style={styles.metricLabel}>{totalWinLabel}</Text>
+            <Text style={[styles.metricValue, styles.metricValueWin]}>{money(group.avgWin, 0)}</Text>
+            <Text style={styles.metricLabel}>{avgWinLabel}</Text>
           </View>
         </View>
 
-        {/* Right: rank chip + avg per machine + chevron */}
+        {/* Right: rank chip + bank totals + WWCJPR + chevron */}
         <View style={styles.rightCol}>
           {ri && (
             <View style={[styles.rankChip, { borderColor: ri.border }]}>
               <Text style={[styles.rankText, { color: ri.color }]}>{ri.label}</Text>
             </View>
           )}
-          <Text style={styles.avgLabel}>CI: {money(group.avgCoinIn, 0)} · Win: {money(group.avgWin, 0)}</Text>
+          <Text style={styles.avgLabel}>Total CI: {money(group.totalCoinIn, 0)} · Win: {money(group.totalWin, 0)}</Text>
           <Text style={[styles.avgLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
         </View>

@@ -213,12 +213,10 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
             {/* Period start / end */}
             <View style={s.rowPair}>
               <View style={s.halfField}>
-                <FieldLabel>Fecha Inicio</FieldLabel>
-                <TextInput style={s.input} value={draft.periodStart} onChangeText={v => set('periodStart', v)} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" editable={isAdmin} />
+                <DateField label="Fecha Inicio" value={draft.periodStart} onChange={v => set('periodStart', v)} editable={isAdmin} />
               </View>
               <View style={s.halfField}>
-                <FieldLabel>Fecha Fin</FieldLabel>
-                <TextInput style={s.input} value={draft.periodEnd} onChangeText={v => set('periodEnd', v)} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" editable={isAdmin} />
+                <DateField label="Fecha Fin" value={draft.periodEnd} onChange={v => set('periodEnd', v)} editable={isAdmin} />
               </View>
             </View>
 
@@ -256,6 +254,48 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <Text style={s.fieldLabel}>{String(children).toUpperCase()}</Text>;
+}
+
+type DateFieldProps = { label: string; value: string; onChange: (v: string) => void; editable: boolean };
+
+// Native HTML date selector on web (calendar picker); plain masked input on iOS/Android.
+function DateField({ label, value, onChange, editable }: DateFieldProps) {
+  return (
+    <View>
+      <FieldLabel>{label}</FieldLabel>
+      {Platform.OS === 'web' ? (
+        <input
+          type="date"
+          value={value}
+          disabled={!editable}
+          onChange={e => onChange(e.target.value)}
+          style={{
+            backgroundColor: BG,
+            borderRadius: radius.md,
+            border: `1px solid ${BORDER}`,
+            paddingLeft: spacing.md,
+            paddingRight: spacing.md,
+            paddingTop: 10,
+            paddingBottom: 10,
+            color: NAVY,
+            fontSize: 15,
+            fontFamily: 'inherit',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        />
+      ) : (
+        <TextInput
+          style={s.input}
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#94a3b8"
+          editable={editable}
+        />
+      )}
+    </View>
+  );
 }
 
 const s = StyleSheet.create({

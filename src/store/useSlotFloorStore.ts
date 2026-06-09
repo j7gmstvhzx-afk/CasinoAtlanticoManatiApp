@@ -160,7 +160,8 @@ export type BankGroup = {
   topGame: string;
 };
 
-function buildBankGroups(machines: SlotMachine[]): BankGroup[] {
+function buildBankGroups(allMachines: SlotMachine[]): BankGroup[] {
+  const machines = allMachines.filter(m => m.active);
   const bankMap = new Map<string, SlotMachine[]>();
   for (const m of machines) {
     const bank = m.location.split('-')[0];
@@ -349,6 +350,7 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     const { machines, explorerSearch, explorerFilters: f } = get();
     const q = explorerSearch.toLowerCase().trim();
     return machines.filter(m => {
+      if (!m.active) return false;
       if (f.manufacturer && m.manufacturer !== f.manufacturer) return false;
       if (f.type         && m.type         !== f.type)         return false;
       if (f.denomination && m.denomination !== f.denomination) return false;

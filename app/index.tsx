@@ -47,7 +47,8 @@ const CHANGE_COLORS: Record<string, string> = {
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
 function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const machines    = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
 
@@ -145,6 +146,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
     if (!activeFilter) return [];
     return [...machines]
       .filter(m => {
+        if (!m.active) return false;
         const val = activeFilter.type === 'coinIn' ? (m.avgCoinIn ?? 0) : (m.avgWin ?? 0);
         return val > 0 && val < activeFilter.max;
       })
@@ -218,7 +220,8 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
 // ── Section: Comparativa vs 2025 ──────────────────────────────────────────────
 
 function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const machines = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
@@ -231,7 +234,8 @@ function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
 function FabricantesSection({ gutter }: { gutter: number }) {
-  const machines   = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const floorStats = useSlotFloorStore(s => s.floorStats);
 
   const rows = useMemo(() => {
@@ -411,7 +415,8 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
 }
 
 function ApuestasSection({ gutter }: { gutter: number }) {
-  const machines = useSlotFloorStore(s => s.machines);
+  const allMachines = useSlotFloorStore(s => s.machines);
+  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
   const [betView, setBetView] = useState<'min' | 'max'>('min');
   const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
 
@@ -764,7 +769,7 @@ export default function DashboardScreen() {
 
   const handleGenerateReport = () => {
     generateFloorReport({
-      machines,
+      machines: machines.filter(m => m.active),
       bankGroups: getBankGroups(),
       periodLabel,
     });

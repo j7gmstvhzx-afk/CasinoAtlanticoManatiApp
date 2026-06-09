@@ -677,32 +677,38 @@ function ApuestasSection({ gutter }: { gutter: number }) {
 
 // ── Section: Cambios ──────────────────────────────────────────────────────────
 
+const CAMBIOS_KPI_DEFS = [
+  { type: 'compra',       icon: 'add-circle-outline'      as const, label: 'Compras',           color: C.green  },
+  { type: 'reubicacion',  icon: 'swap-horizontal-outline' as const, label: 'Reubicaciones',     color: C.gold   },
+  { type: 'cambio_juego', icon: 'game-controller-outline' as const, label: 'Cambios de Juego',  color: C.navy3  },
+  { type: 'removida',     icon: 'remove-circle-outline'   as const, label: 'Removidas',          color: C.red    },
+];
+
 function CambiosSection({ gutter }: { gutter: number }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
 
   const summary = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const c of changes) counts[c.type] = (counts[c.type] ?? 0) + 1;
+    const counts: Record<string, number> = { compra: 0, reubicacion: 0, cambio_juego: 0, removida: 0 };
+    for (const c of changes) if (c.type in counts) counts[c.type]++;
     return counts;
   }, [changes]);
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* Summary pills */}
-      {changes.length > 0 && (
-        <View style={styles.changeSummary}>
-          {Object.entries(summary).map(([type, count]) => (
-            <View
-              key={type}
-              style={[styles.changePill, { backgroundColor: (CHANGE_COLORS[type] ?? C.navy3) + '18', borderColor: (CHANGE_COLORS[type] ?? C.navy3) + '44' }]}
-            >
-              <RNText style={[styles.changePillText, { color: CHANGE_COLORS[type] ?? C.navy3 }]}>
-                {CHANGE_LABELS[type] ?? type}: {count}
-              </RNText>
+      {/* KPI dashboard */}
+      <View style={styles.cambiosKpiGrid}>
+        {CAMBIOS_KPI_DEFS.map(({ type, icon, label, color }) => (
+          <View key={type} style={[styles.cambiosKpiCard, { borderLeftColor: color }]}>
+            <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
+              <Ionicons name={icon} size={22} color={color} />
             </View>
-          ))}
-        </View>
-      )}
+            <View style={styles.cambiosKpiBody}>
+              <RNText style={[styles.cambiosKpiCount, { color }]}>{summary[type]}</RNText>
+              <RNText style={styles.cambiosKpiLabel}>{label}</RNText>
+            </View>
+          </View>
+        ))}
+      </View>
 
       {changes.length === 0 ? (
         <View style={styles.emptyState}>
@@ -711,7 +717,7 @@ function CambiosSection({ gutter }: { gutter: number }) {
           <RNText style={styles.emptyBody}>Los cambios se registran automáticamente al editar una máquina.</RNText>
         </View>
       ) : (
-        <View style={card.base}>
+        <View style={[card.base, { padding: 0, overflow: 'hidden' }]}>
           {changes.map((c, i) => (
             <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} />
           ))}
@@ -725,6 +731,22 @@ function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) 
   const color = CHANGE_COLORS[c.type] ?? C.navy3;
   const date  = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : '—';
 
+  let locationLine: string | null = null;
+  if (c.type === 'compra' && c.location2025) {
+    locationLine = `→ ${c.location2025}`;
+  } else if (c.type === 'reubicacion' && c.location2024 && c.location2025) {
+    locationLine = `${c.location2024} → ${c.location2025}`;
+  } else if (c.type === 'removida' && c.location2024) {
+    locationLine = c.location2024;
+  }
+
+  let gameLine: string | null = null;
+  if (c.type === 'compra' && c.game2025) {
+    gameLine = c.game2025;
+  } else if (c.game2024 && c.game2025 && c.game2024 !== c.game2025) {
+    gameLine = `${c.game2024} → ${c.game2025}`;
+  }
+
   return (
     <View style={[styles.changeRow, alt && styles.tableRowAlt]}>
       <View style={[styles.changeTypeTag, { backgroundColor: color + '18', borderColor: color + '44' }]}>
@@ -732,12 +754,8 @@ function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) 
       </View>
       <View style={styles.changeInfo}>
         <RNText style={styles.changeMcId}>Máquina {c.mc}</RNText>
-        {c.game2024 && c.game2025 && c.game2024 !== c.game2025 && (
-          <RNText style={styles.changeDetail} numberOfLines={1}>{c.game2024} → {c.game2025}</RNText>
-        )}
-        {c.location2024 && c.location2025 && c.location2024 !== c.location2025 && (
-          <RNText style={styles.changeDetail}>{c.location2024} → {c.location2025}</RNText>
-        )}
+        {gameLine ? <RNText style={styles.changeDetail} numberOfLines={2}>{gameLine}</RNText> : null}
+        {locationLine ? <RNText style={styles.changeLocationLine}>{locationLine}</RNText> : null}
         {c.periodLabel ? <RNText style={styles.changePeriod}>{c.periodLabel}</RNText> : null}
       </View>
       <RNText style={styles.changeDate}>{date}</RNText>
@@ -1158,25 +1176,38 @@ const styles = StyleSheet.create({
   mfrDot:         { width: 8, height: 8, borderRadius: 4 },
   tdMfr:          { fontSize: 12, fontWeight: '600', color: C.text },
 
-  changeSummary:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  changePill: {
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1,
+  cambiosKpiGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20,
   },
-  changePillText: { fontSize: 12, fontWeight: '700' },
+  cambiosKpiCard: {
+    flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderLeftWidth: 4,
+    shadowColor: '#1a2332', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
+  },
+  cambiosKpiIcon: {
+    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  },
+  cambiosKpiBody:  { flex: 1 },
+  cambiosKpiCount: { fontSize: 30, fontWeight: '800', lineHeight: 34 },
+  cambiosKpiLabel: { fontSize: 12, color: C.muted, fontWeight: '600', marginTop: 2 },
 
   changeRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    paddingHorizontal: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
+    paddingHorizontal: 16, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
   },
   changeTypeTag: {
-    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, minWidth: 96,
+    borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1,
+    minWidth: 104, alignItems: 'center',
   },
-  changeTypeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  changeInfo:     { flex: 1 },
-  changeMcId:     { fontSize: 13, fontWeight: '700', color: C.navy },
-  changeDetail:   { fontSize: 11, color: C.text, marginTop: 2 },
-  changePeriod:   { fontSize: 10, color: C.muted, marginTop: 1 },
-  changeDate:     { fontSize: 11, color: C.muted },
+  changeTypeText:     { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
+  changeInfo:         { flex: 1 },
+  changeMcId:         { fontSize: 15, fontWeight: '700', color: C.navy },
+  changeDetail:       { fontSize: 13, color: C.text, marginTop: 3 },
+  changeLocationLine: { fontSize: 13, color: C.navy3, marginTop: 2, fontWeight: '600' },
+  changePeriod:       { fontSize: 11, color: C.muted, marginTop: 2 },
+  changeDate:         { fontSize: 13, color: C.muted, fontWeight: '500' },
 
   emptyState: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12,

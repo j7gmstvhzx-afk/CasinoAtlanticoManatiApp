@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -254,13 +255,22 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   // ── machine edits ─────────────────────────────────────────────────────────
   async updateMachine(id, patch) {
     const prev = get().machines.find(m => m.id === id);
+    if (!prev) return;
     const updated = get().machines.map(m => m.id === id ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
 
-    await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+    const { error } = await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+    if (error) {
+      // RLS or network rejected the write — roll back so the UI matches the DB
+      const rolledBack = get().machines.map(m => m.id === id ? prev : m);
+      set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
+      if (typeof window !== 'undefined') {
+        window.alert(`No se pudo guardar la máquina ${id}: ${error.message}`);
+      }
+      return;
+    }
 
     // Auto-detect and record change type(s)
-    if (!prev) return;
     const newGame     = patch.game     ?? prev.game;
     const newLocation = patch.location ?? prev.location;
     const gameChanged     = newGame     !== prev.game;
@@ -333,10 +343,17 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
 
   async batchUpdateMachines(ids, patch) {
     const idSet  = new Set(ids);
+    const prevById = new Map(get().machines.filter(m => idSet.has(m.id)).map(m => [m.id, m]));
     const updated = get().machines.map(m => idSet.has(m.id) ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
-    for (const id of ids) {
-      await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+
+    const { error } = await supabase.from('machines').update(machineToDbPatch(patch)).in('id', ids);
+    if (error) {
+      const rolledBack = get().machines.map(m => prevById.get(m.id) ?? m);
+      set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
+      if (typeof window !== 'undefined') {
+        window.alert(`No se pudieron guardar los cambios: ${error.message}`);
+      }
     }
   },
 
@@ -393,3 +410,9 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
       .slice(0, n);
   },
 }));
+
+// Active (non-retired) machines — single source for every dashboard section.
+export function useActiveMachines(): SlotMachine[] {
+  const machines = useSlotFloorStore(s => s.machines);
+  return useMemo(() => machines.filter(m => m.active), [machines]);
+}

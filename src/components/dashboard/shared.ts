@@ -23,6 +23,11 @@ export const C = {
   rowLine:   '#f1f4f7',
 };
 
+// Brand chip blue (logo, login panel, primary actions).
+export const CHIP_BLUE      = '#2457b5';
+export const CHIP_BLUE_DARK = '#1a3e96';
+export const CHIP_BLUE_MID  = '#3568c8';
+
 // Manufacturer colors (donut + accents). Falls back through a palette.
 const MFR_COLORS: Record<string, string> = {
   'Konami':         C.navy,

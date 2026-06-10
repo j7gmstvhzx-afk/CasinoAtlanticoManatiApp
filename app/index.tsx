@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useSlotFloorStore } from '@/store/useSlotFloorStore';
+import { useSlotFloorStore, useActiveMachines } from '@/store/useSlotFloorStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { MachineEditSheet } from '@/components/slotfloor/MachineEditSheet';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -16,7 +16,7 @@ import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { MachineRow } from '@/components/dashboard/MachineRow';
-import { C, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
+import { C, CHIP_BLUE, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
@@ -47,8 +47,7 @@ const CHANGE_COLORS: Record<string, string> = {
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
 function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+  const machines = useActiveMachines();
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
 
@@ -220,8 +219,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
 // ── Section: Comparativa vs 2025 ──────────────────────────────────────────────
 
 function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+  const machines = useActiveMachines();
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
@@ -234,8 +232,7 @@ function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
 function FabricantesSection({ gutter }: { gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+  const machines = useActiveMachines();
   const floorStats = useSlotFloorStore(s => s.floorStats);
 
   const rows = useMemo(() => {
@@ -415,8 +412,7 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
 }
 
 function ApuestasSection({ gutter }: { gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+  const machines = useActiveMachines();
   const [betView, setBetView] = useState<'min' | 'max'>('min');
   const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
 
@@ -677,18 +673,20 @@ function ApuestasSection({ gutter }: { gutter: number }) {
 
 // ── Section: Cambios ──────────────────────────────────────────────────────────
 
+// Colors come from CHANGE_COLORS so the cards can't drift from the row tags.
 const CAMBIOS_KPI_DEFS = [
-  { type: 'compra',       icon: 'add-circle-outline'      as const, label: 'Compras',           color: C.green  },
-  { type: 'reubicacion',  icon: 'swap-horizontal-outline' as const, label: 'Reubicaciones',     color: C.gold   },
-  { type: 'cambio_juego', icon: 'game-controller-outline' as const, label: 'Cambios de Juego',  color: C.navy3  },
-  { type: 'removida',     icon: 'remove-circle-outline'   as const, label: 'Removidas',          color: C.red    },
+  { type: 'compra',       icon: 'add-circle-outline'      as const, label: 'Compras' },
+  { type: 'reubicacion',  icon: 'swap-horizontal-outline' as const, label: 'Reubicaciones' },
+  { type: 'cambio_juego', icon: 'game-controller-outline' as const, label: 'Cambios de Juego' },
+  { type: 'removida',     icon: 'remove-circle-outline'   as const, label: 'Removidas' },
 ];
 
 function CambiosSection({ gutter }: { gutter: number }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
 
   const summary = useMemo(() => {
-    const counts: Record<string, number> = { compra: 0, reubicacion: 0, cambio_juego: 0, removida: 0 };
+    const counts: Record<string, number> = {};
+    for (const { type } of CAMBIOS_KPI_DEFS) counts[type] = 0;
     for (const c of changes) if (c.type in counts) counts[c.type]++;
     return counts;
   }, [changes]);
@@ -696,19 +694,24 @@ function CambiosSection({ gutter }: { gutter: number }) {
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
       {/* KPI dashboard */}
-      <View style={styles.cambiosKpiGrid}>
-        {CAMBIOS_KPI_DEFS.map(({ type, icon, label, color }) => (
-          <View key={type} style={[styles.cambiosKpiCard, { borderLeftColor: color }]}>
-            <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
-              <Ionicons name={icon} size={22} color={color} />
-            </View>
-            <View style={styles.cambiosKpiBody}>
-              <RNText style={[styles.cambiosKpiCount, { color }]}>{summary[type]}</RNText>
-              <RNText style={styles.cambiosKpiLabel}>{label}</RNText>
-            </View>
-          </View>
-        ))}
-      </View>
+      {changes.length > 0 && (
+        <View style={styles.cambiosKpiGrid}>
+          {CAMBIOS_KPI_DEFS.map(({ type, icon, label }) => {
+            const color = CHANGE_COLORS[type] ?? C.navy3;
+            return (
+              <View key={type} style={[styles.cambiosKpiCard, { borderLeftColor: color }]}>
+                <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
+                  <Ionicons name={icon} size={22} color={color} />
+                </View>
+                <View style={styles.cambiosKpiBody}>
+                  <RNText style={[styles.cambiosKpiCount, { color }]}>{summary[type]}</RNText>
+                  <RNText style={styles.cambiosKpiLabel}>{label}</RNText>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       {changes.length === 0 ? (
         <View style={styles.emptyState}>
@@ -772,7 +775,7 @@ export default function DashboardScreen() {
 
   const init          = useSlotFloorStore(s => s.init);
   const initialized   = useSlotFloorStore(s => s.initialized);
-  const machines      = useSlotFloorStore(s => s.machines);
+  const machines      = useActiveMachines();
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
   const profile       = useAuthStore(s => s.profile);
   const signOut       = useAuthStore(s => s.signOut);
@@ -787,7 +790,7 @@ export default function DashboardScreen() {
 
   const handleGenerateReport = () => {
     generateFloorReport({
-      machines: machines.filter(m => m.active),
+      machines,
       bankGroups: getBankGroups(),
       periodLabel,
     });
@@ -891,7 +894,7 @@ const styles = StyleSheet.create({
   },
   brandRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#2457b5',
+    width: 32, height: 32, borderRadius: 16, backgroundColor: CHIP_BLUE,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
   },

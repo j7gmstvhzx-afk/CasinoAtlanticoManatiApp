@@ -15,6 +15,13 @@ type Props = {
 
 type Row = { machine: SlotMachine; ref: SlotEntry2025 | null };
 
+// A row is comparable only when the position has 2025 data AND the current
+// machine already has data entered — otherwise a new machine at an old
+// position would render as a false −100% drop.
+function isComparable(r: Row): boolean {
+  return r.ref !== null && r.machine.avgCoinIn != null && r.machine.avgWin != null;
+}
+
 type BankCompare = {
   bank: string;
   rows: Row[];
@@ -66,7 +73,7 @@ function buildComparisons(machines: SlotMachine[]): BankCompare[] {
     .map(([bank, rows]) => {
       const sorted = [...rows].sort((a, b) =>
         parseInt(a.machine.location.split('-')[1] ?? '0', 10) - parseInt(b.machine.location.split('-')[1] ?? '0', 10));
-      const matchedRows = sorted.filter(r => r.ref !== null);
+      const matchedRows = sorted.filter(isComparable);
       const n = matchedRows.length || 1;
       const sum = (pick: (r: Row) => number) => matchedRows.reduce((s, r) => s + pick(r), 0);
       return {
@@ -121,7 +128,7 @@ function CompareRow({ row }: { row: Row }) {
         </View>
       </View>
 
-      {ref ? (
+      {isComparable(row) && ref ? (
         <View style={styles.deltaPanel}>
           <MiniDelta label="CI"  then={ref.avgCoinIn} now={m.avgCoinIn ?? 0} color={C.navy3} />
           <View style={styles.miniDivider} />
@@ -129,7 +136,9 @@ function CompareRow({ row }: { row: Row }) {
         </View>
       ) : (
         <View style={styles.noMatch}>
-          <Text style={styles.noMatchText}>Sin dato 2025</Text>
+          <Text style={styles.noMatchText}>
+            {ref === null ? 'Sin dato 2025' : 'Máquina nueva · sin dato actual'}
+          </Text>
         </View>
       )}
     </View>
@@ -167,14 +176,21 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
           <Text style={styles.bankNumLg}>{bank}</Text>
           <Text style={styles.bankCount}>{group.rows.length} máqs</Text>
           {group.matched < group.rows.length && (
-            <Text style={styles.bankUnmatched}>{group.rows.length - group.matched} sin 2025</Text>
+            <Text style={styles.bankUnmatched}>{group.rows.length - group.matched} sin comparar</Text>
           )}
         </View>
 
-        <View style={[styles.metricsRow, !isWide && styles.metricsRowNarrow]}>
-          <CompareMetric label="Avg Coin-In: 2025 → Actual" then={group.ci2025}  now={group.ciNow}  accent={C.navy3} active={metric === 'avgCoinIn'} />
-          <CompareMetric label="Avg Win: 2025 → Actual"     then={group.win2025} now={group.winNow} accent={C.green} active={metric === 'avgWin'} />
-        </View>
+        {group.matched > 0 ? (
+          <View style={[styles.metricsRow, !isWide && styles.metricsRowNarrow]}>
+            <CompareMetric label="Avg Coin-In: 2025 → Actual" then={group.ci2025}  now={group.ciNow}  accent={C.navy3} active={metric === 'avgCoinIn'} />
+            <CompareMetric label="Avg Win: 2025 → Actual"     then={group.win2025} now={group.winNow} accent={C.green} active={metric === 'avgWin'} />
+          </View>
+        ) : (
+          <View style={[styles.metricsRow, styles.noCompareBox]}>
+            <Ionicons name="information-circle-outline" size={14} color={C.muted} />
+            <Text style={styles.noCompareText}>Sin datos para comparar — máquinas nuevas pendientes de registro</Text>
+          </View>
+        )}
 
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
       </Pressable>
@@ -213,7 +229,7 @@ export function Comparativa2025({ machines, metric }: Props) {
           <Text style={styles.introTitle}>Comparativa de rendimiento vs. 2025</Text>
           <Text style={styles.introSub}>
             Cada posición del piso (ej. 09-01) comparada contra su misma posición en el snapshot 2025 ·
-            {' '}{totals.matched} de {totals.total} máquinas con dato histórico
+            {' '}{totals.matched} de {totals.total} máquinas comparables
           </Text>
         </View>
       </View>
@@ -364,4 +380,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10, marginRight: 8,
   },
   noMatchText: { fontSize: 11, color: C.muted, fontStyle: 'italic' },
+
+  noCompareBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.track, borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 12,
+  },
+  noCompareText: { fontSize: 11, color: C.muted, fontStyle: 'italic', flex: 1 },
 });

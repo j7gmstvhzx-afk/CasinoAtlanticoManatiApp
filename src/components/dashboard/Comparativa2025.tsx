@@ -214,7 +214,27 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
 
 // ── Section root ──────────────────────────────────────────────────────────────
 
+type DeltaFilter = 'all' | 'down' | 'up';
+
+const DELTA_FILTERS: { id: DeltaFilter; label: string }[] = [
+  { id: 'all',  label: 'Todos' },
+  { id: 'down', label: '↓ Solo caídas' },
+  { id: 'up',   label: '↑ Solo subidas' },
+];
+
+// Bank-level delta (%) for the active metric, or null when nothing is comparable.
+function groupDelta(g: BankCompare, metric: Metric): number | null {
+  if (g.matched === 0) return null;
+  const then = metric === 'avgWin' ? g.win2025 : g.ci2025;
+  const now  = metric === 'avgWin' ? g.winNow  : g.ciNow;
+  if (then === 0) return null;
+  return ((now - then) / then) * 100;
+}
+
 export function Comparativa2025({ machines, metric }: Props) {
+  const [filter, setFilter] = useState<DeltaFilter>('all');
+  const [sortWorst, setSortWorst] = useState(false);
+
   const groups = useMemo(() => buildComparisons(machines), [machines]);
 
   const totals = useMemo(() => {
@@ -222,6 +242,34 @@ export function Comparativa2025({ machines, metric }: Props) {
     const total   = groups.reduce((s, g) => s + g.rows.length, 0);
     return { matched, total };
   }, [groups]);
+
+  // Executive summary across comparable banks: average move + extremes.
+  const summary = useMemo(() => {
+    const withDelta = groups
+      .map(g => ({ bank: g.bank, delta: groupDelta(g, metric) }))
+      .filter((x): x is { bank: string; delta: number } => x.delta !== null);
+    if (!withDelta.length) return null;
+    const avg = withDelta.reduce((s, x) => s + x.delta, 0) / withDelta.length;
+    const worst = withDelta.reduce((a, b) => (b.delta < a.delta ? b : a));
+    const best  = withDelta.reduce((a, b) => (b.delta > a.delta ? b : a));
+    const down  = withDelta.filter(x => x.delta < 0).length;
+    return { avg, worst, best, down, up: withDelta.length - down };
+  }, [groups, metric]);
+
+  const visible = useMemo(() => {
+    let list = groups;
+    if (filter !== 'all') {
+      list = list.filter(g => {
+        const d = groupDelta(g, metric);
+        return d !== null && (filter === 'down' ? d < 0 : d >= 0);
+      });
+    }
+    if (sortWorst) {
+      list = [...list].sort((a, b) =>
+        (groupDelta(a, metric) ?? Infinity) - (groupDelta(b, metric) ?? Infinity));
+    }
+    return list;
+  }, [groups, filter, sortWorst, metric]);
 
   return (
     <View style={{ gap: 12 }}>
@@ -238,7 +286,66 @@ export function Comparativa2025({ machines, metric }: Props) {
         </View>
       </View>
 
-      {groups.map(g => <BankCompareCard key={g.bank} group={g} metric={metric} />)}
+      {/* Executive summary strip */}
+      {summary && (
+        <View style={styles.summaryStrip}>
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: summary.avg >= 0 ? C.green : C.red }]}>
+              {summary.avg >= 0 ? '+' : ''}{summary.avg.toFixed(1)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Cambio promedio{'\n'}({metric === 'avgWin' ? 'Win' : 'Coin-In'})</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={[styles.summaryValue, { color: C.red }]}>
+              Banco {summary.worst.bank.padStart(2, '0')} · {summary.worst.delta.toFixed(0)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Mayor caída</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={[styles.summaryValue, { color: C.green }]}>
+              Banco {summary.best.bank.padStart(2, '0')} · +{summary.best.delta.toFixed(0)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Mayor subida</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={styles.summaryValue}>
+              <Text style={{ color: C.green }}>{summary.up} ↑</Text>
+              <Text style={{ color: C.faint }}>  ·  </Text>
+              <Text style={{ color: C.red }}>{summary.down} ↓</Text>
+            </Text>
+            <Text style={styles.summaryLabel}>Bancos</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Filter + sort controls */}
+      <View style={styles.controlsRow}>
+        <View style={styles.filterPills}>
+          {DELTA_FILTERS.map(f => (
+            <Pressable
+              key={f.id}
+              style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
+              onPress={() => setFilter(f.id)}
+            >
+              <Text style={[styles.filterPillText, filter === f.id && styles.filterPillTextActive]}>{f.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          style={[styles.sortBtn, sortWorst && styles.sortBtnActive]}
+          onPress={() => setSortWorst(s => !s)}
+        >
+          <Ionicons name="swap-vertical" size={13} color={sortWorst ? '#fff' : C.navy3} />
+          <Text style={[styles.sortBtnText, sortWorst && { color: '#fff' }]}>
+            {sortWorst ? 'Mayor caída primero' : 'Por posición'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {visible.map(g => <BankCompareCard key={g.bank} group={g} metric={metric} />)}
+      {visible.length === 0 && (
+        <Text style={styles.emptyFilter}>Ningún banco coincide con este filtro.</Text>
+      )}
     </View>
   );
 }
@@ -261,6 +368,55 @@ const styles = StyleSheet.create({
   },
   introTitle: { fontSize: 14, fontWeight: '800', color: C.navy, marginBottom: 3 },
   introSub:   { fontSize: 11.5, color: C.navy3, lineHeight: 16 },
+
+  // Executive summary strip
+  summaryStrip: {
+    flexDirection: 'row',
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 12,
+  },
+  summaryItem:    { flex: 1, alignItems: 'center', paddingHorizontal: 8, gap: 3 },
+  summaryDivider: { borderLeftWidth: 1, borderLeftColor: C.border },
+  summaryValue:   { fontSize: 14, fontWeight: '800', color: C.navy, letterSpacing: -0.2, textAlign: 'center' },
+  summaryLabel:   { fontSize: 9.5, color: C.muted, fontWeight: '600', textAlign: 'center', lineHeight: 13 },
+
+  // Filter + sort controls
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  filterPill: {
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  filterPillActive:     { backgroundColor: C.navy, borderColor: C.navy },
+  filterPillText:       { fontSize: 12, fontWeight: '600', color: C.muted },
+  filterPillTextActive: { color: '#fff' },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  sortBtnActive: { backgroundColor: C.navy, borderColor: C.navy },
+  sortBtnText:   { fontSize: 12, fontWeight: '600', color: C.navy3 },
+  emptyFilter:   { fontSize: 13, color: C.faint, textAlign: 'center', paddingVertical: 20 },
 
   card: {
     backgroundColor: C.card,

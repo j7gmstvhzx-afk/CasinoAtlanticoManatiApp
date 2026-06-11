@@ -19,7 +19,8 @@ import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { FloorHeatmap } from '@/components/dashboard/FloorHeatmap';
 import { MachineRow } from '@/components/dashboard/MachineRow';
-import { C, CHIP_BLUE, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
+import { C, CHIP_BLUE, card, money, mfrColor, shortMfr, bankOf } from '@/components/dashboard/shared';
+import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
@@ -47,6 +48,87 @@ const CHANGE_COLORS: Record<string, string> = {
   cambio_juego: C.navy3,
   removida:     C.red,
 };
+
+// ── Floor health (Resumen hero card) ──────────────────────────────────────────
+//
+// Answers "¿cómo va el piso?" in one glance: score = % of comparable machines
+// (position has 2025 data AND current data exists) whose active-metric delta
+// vs 2025 is better than −15%. Alert banks = banks whose aggregate delta
+// dropped more than 20%.
+
+function computeFloorHealth(machines: SlotMachine[], metric: Metric) {
+  const pick = (m: { avgCoinIn?: number | null; avgWin?: number | null }) =>
+    metric === 'avgWin' ? m.avgWin ?? 0 : m.avgCoinIn ?? 0;
+
+  let comparable = 0, healthy = 0, nowSum = 0, thenSum = 0;
+  const bankNow = new Map<string, number>();
+  const bankThen = new Map<string, number>();
+
+  for (const m of machines) {
+    const ref = SLOT_FLOOR_2025[m.location];
+    if (!ref || m.avgCoinIn == null || m.avgWin == null) continue;
+    const now = pick(m), then = pick(ref);
+    comparable++;
+    nowSum += now; thenSum += then;
+    if (then === 0 || (now - then) / then >= -0.15) healthy++;
+    const bank = bankOf(m.location);
+    bankNow.set(bank, (bankNow.get(bank) ?? 0) + now);
+    bankThen.set(bank, (bankThen.get(bank) ?? 0) + then);
+  }
+  if (comparable === 0) return null;
+
+  let alertBanks = 0;
+  for (const [bank, then] of bankThen) {
+    if (then > 0 && ((bankNow.get(bank) ?? 0) - then) / then < -0.20) alertBanks++;
+  }
+
+  return {
+    score: Math.round((healthy / comparable) * 100),
+    deltaPct: thenSum > 0 ? ((nowSum - thenSum) / thenSum) * 100 : 0,
+    alertBanks,
+    comparable,
+  };
+}
+
+function FloorHealthCard({ metric }: { metric: Metric }) {
+  const machines = useActiveMachines();
+  const health = useMemo(() => computeFloorHealth(machines, metric), [machines, metric]);
+  if (!health) return null;
+
+  const tone = health.score >= 90 ? C.green : health.score >= 70 ? '#b45309' : C.red;
+  const toneBg = health.score >= 90 ? C.greenBg : health.score >= 70 ? '#fdf6ec' : C.redBg;
+  const statusLabel = health.score >= 90 ? 'Saludable' : health.score >= 70 ? 'Atención' : 'Crítico';
+  const deltaUp = health.deltaPct >= 0;
+
+  return (
+    <View style={[styles.healthCard, { borderLeftColor: tone }]}>
+      <View style={[styles.healthScoreBox, { backgroundColor: toneBg }]}>
+        <RNText style={[styles.healthScore, { color: tone }]}>{health.score}</RNText>
+        <RNText style={[styles.healthScoreSub, { color: tone }]}>/100</RNText>
+      </View>
+      <View style={styles.healthBody}>
+        <View style={styles.healthTitleRow}>
+          <RNText style={styles.healthTitle}>Salud del Piso</RNText>
+          <View style={[styles.healthStatusChip, { backgroundColor: toneBg, borderColor: tone + '55' }]}>
+            <RNText style={[styles.healthStatusText, { color: tone }]}>{statusLabel}</RNText>
+          </View>
+        </View>
+        <RNText style={styles.healthDetail}>
+          <RNText style={{ color: deltaUp ? C.green : C.red, fontWeight: '800' }}>
+            {deltaUp ? '↑' : '↓'} {Math.abs(health.deltaPct).toFixed(1)}%
+          </RNText>
+          {' '}vs 2025 ({metric === 'avgWin' ? 'Win' : 'Coin-In'})
+          {health.alertBanks > 0
+            ? <RNText style={{ color: C.red, fontWeight: '700' }}>  ·  ⚠ {health.alertBanks} {health.alertBanks === 1 ? 'banco' : 'bancos'} con caída &gt;20%</RNText>
+            : '  ·  sin bancos en alerta'}
+        </RNText>
+        <RNText style={styles.healthFootnote}>
+          % de máquinas comparables sin caída mayor a 15% · {health.comparable} máquinas con dato 2025
+        </RNText>
+      </View>
+    </View>
+  );
+}
 
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
@@ -89,6 +171,9 @@ function ResumeSection({ metric, gutter, onOpenBank, onOpenMfr }: {
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      {/* Floor health — the 5-second answer */}
+      <FloorHealthCard metric={metric} />
+
       {/* KPI grid — auto-reflows across screen width */}
       <View style={styles.kpiGrid}>
         <StatCard label="Total Máquinas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
@@ -1168,6 +1253,38 @@ const styles = StyleSheet.create({
 
   loading:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText:    { fontSize: 14, color: C.muted },
+
+  // ── Floor health card ───────────────────────────────────────────────────────
+  healthCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderLeftWidth: 5,
+    padding: 16,
+  },
+  healthScoreBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  healthScore:    { fontSize: 34, fontWeight: '900', letterSpacing: -1.5 },
+  healthScoreSub: { fontSize: 13, fontWeight: '700', opacity: 0.7 },
+  healthBody:     { flex: 1, gap: 4 },
+  healthTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  healthTitle:    { fontSize: 16, fontWeight: '800', color: C.navy, letterSpacing: -0.2 },
+  healthStatusChip: {
+    borderRadius: 999, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  healthStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  healthDetail:     { fontSize: 13, color: C.text, lineHeight: 19 },
+  healthFootnote:   { fontSize: 10.5, color: C.faint },
 
   // ── Global search ───────────────────────────────────────────────────────────
   searchBtn: {

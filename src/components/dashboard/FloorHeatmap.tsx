@@ -16,8 +16,9 @@ type Props = {
 };
 
 // Sequential 5-step performance scale (worst → best quintile).
-const HEAT_COLORS = ['#d64545', '#e0784a', '#d4a849', '#8fb56f', '#1f9d57'];
-const NO_DATA_BG  = '#e4e8ee';
+// Desaturated on purpose: this is data variance, not an alarm panel.
+const HEAT_COLORS = ['#e3b1b1', '#e6c3a4', '#e0d4a8', '#bcdcae', '#8cc97f'];
+const NO_DATA_BG  = '#eef1f4';
 
 function metricOf(g: BankGroup, metric: Metric): number {
   return metric === 'avgWin' ? g.avgWin : g.avgCoinIn;
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   cellBank: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#fff',
+    color: '#3f4d63',
     letterSpacing: -0.3,
   },
   cellBankNoData: {
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
   cellCount: {
     fontSize: 9,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(63,77,99,0.75)',
   },
 
   legend: {

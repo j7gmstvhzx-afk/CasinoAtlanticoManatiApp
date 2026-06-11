@@ -1,26 +1,26 @@
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
-// ── Palette (matches Slot Floor Analytics reference) ─────────────────────────
+// ── Palette ("Heritage Refined" — lighter, executive slate + muted gold) ─────
 export const C = {
-  page:      '#f4f6f9',
+  page:      '#f8f9fb',
   card:      '#ffffff',
-  navy:      '#1a2332',
-  navy2:     '#2d3e50',
-  navy3:     '#4a5f7f',
-  gold:      '#c89b63',
-  goldLight: '#d4a574',
-  goldSoft:  '#e8d4b8',
-  track:     '#eef1f5',
-  green:     '#1f9d57',
-  greenBg:   '#e6f5ec',
-  red:       '#d64545',
-  redBg:     '#fbe9e9',
-  ink:       '#1a2332',
-  text:      '#3b4859',
-  muted:     '#8a95a5',
-  faint:     '#aeb7c4',
-  border:    '#e8ecf1',
-  rowLine:   '#f1f4f7',
+  navy:      '#3f4d63',
+  navy2:     '#556a85',
+  navy3:     '#7a8aa3',
+  gold:      '#d4a574',
+  goldLight: '#e8c9a8',
+  goldSoft:  '#f3e6d4',
+  track:     '#f0f4fa',
+  green:     '#16a34a',
+  greenBg:   '#f0fdf4',
+  red:       '#dc2626',
+  redBg:     '#fef2f2',
+  ink:       '#3f4d63',
+  text:      '#56657d',
+  muted:     '#94a3b8',
+  faint:     '#c3ccd9',
+  border:    '#e5e9f0',
+  rowLine:   '#f4f6f9',
 };
 
 // Brand chip blue (logo, login panel, primary actions).
@@ -38,7 +38,7 @@ const MFR_COLORS: Record<string, string> = {
   'WMS':            '#9aa6b5',
   'Everi':          '#b08968',
 };
-const FALLBACK = ['#1a2332', '#2d3e50', '#d4a574', '#4a5f7f', '#c89b63', '#9aa6b5', '#b08968', '#7b8794'];
+const FALLBACK = ['#3f4d63', '#556a85', '#d4a574', '#7a8aa3', '#c8a878', '#9aa6b5', '#b08968', '#7b8794'];
 
 export function mfrColor(name: string, idx = 0): string {
   return MFR_COLORS[name] ?? FALLBACK[idx % FALLBACK.length];
@@ -95,11 +95,11 @@ export function useResponsive(): Responsive {
 export type Tone = 'navy' | 'gold' | 'green' | 'teal' | 'red';
 
 export const TONES: Record<Tone, { fg: string; bg: string; soft: string }> = {
-  navy:  { fg: '#1a2332', bg: '#eaeef4', soft: '#f3f6fa' },
-  gold:  { fg: '#b8863f', bg: '#f7edda', soft: '#fbf5e9' },
-  green: { fg: '#1f9d57', bg: '#e3f4ea', soft: '#f0faf3' },
-  teal:  { fg: '#2d6a6a', bg: '#e0f0f0', soft: '#eef7f7' },
-  red:   { fg: '#d64545', bg: '#fbe6e6', soft: '#fdf1f1' },
+  navy:  { fg: '#3f4d63', bg: '#f0f2f5', soft: '#f7f8fa' },
+  gold:  { fg: '#a87c38', bg: '#faf4e6', soft: '#fcf9f0' },
+  green: { fg: '#15803d', bg: '#e8f7ef', soft: '#f3faf6' },
+  teal:  { fg: '#3a8a83', bg: '#e8f5f3', soft: '#f2faf8' },
+  red:   { fg: '#c65555', bg: '#fce8e8', soft: '#fdf2f2' },
 };
 
 // ── Shared card styles ───────────────────────────────────────────────────────
@@ -107,12 +107,14 @@ export const card = StyleSheet.create({
   base: {
     backgroundColor: C.card,
     borderRadius: 16,
-    padding: 20,
-    shadowColor: '#1a2332',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 2,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: C.border,
+    shadowColor: '#3f4d63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
   },
   titleRow: {
     flexDirection: 'row',

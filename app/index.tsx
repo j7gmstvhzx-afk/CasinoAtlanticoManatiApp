@@ -371,9 +371,18 @@ function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number
 
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
+type MfrSortKey = 'avgCoinIn' | 'avgWin' | 'count';
+
+const MFR_SORT_OPTIONS: { id: MfrSortKey; label: string; topLabel: string }[] = [
+  { id: 'avgCoinIn', label: 'Avg Coin-In PD', topLabel: '🏆 Mejor CI PD' },
+  { id: 'avgWin',    label: 'Avg Win PD',     topLabel: '🏆 Mejor Win PD' },
+  { id: 'count',     label: 'Máquinas',       topLabel: '🏆 Más Máquinas' },
+];
+
 function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highlightMfr?: string | null }) {
   const machines = useActiveMachines();
   const floorStats = useSlotFloorStore(s => s.floorStats);
+  const [sortKey, setSortKey] = useState<MfrSortKey>('avgCoinIn');
 
   const rows = useMemo(() => {
     const total     = machines.length;
@@ -397,8 +406,14 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
         vsFloor:    floorAvgCI > 0 ? ((e.count ? e.totalCoin / e.count : 0) / floorAvgCI) * 100 : 100,
         color:      mfrColor(mfr, 0),
       }))
-      .sort((a, b) => b.avgCoinIn - a.avgCoinIn);
-  }, [machines, floorStats]);
+      .sort((a, b) => b[sortKey] - a[sortKey]);
+  }, [machines, floorStats, sortKey]);
+
+  const leader = useMemo(
+    () => [...rows].sort((a, b) => b.avgCoinIn - a.avgCoinIn)[0],
+    [rows],
+  );
+  const topBadge = MFR_SORT_OPTIONS.find(o => o.id === sortKey)?.topLabel ?? '🏆 Líder';
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
@@ -416,13 +431,34 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
           <RNText style={styles.mfrSummaryNum}>{rows.length}</RNText>
           <RNText style={styles.mfrSummaryLabel}>Fabricantes{'\n'}en el Piso</RNText>
         </View>
-        <View style={[styles.mfrSummaryCard, { borderLeftColor: rows[0]?.color, borderLeftWidth: 4 }]}>
-          <RNText style={[styles.mfrSummaryNum, { color: rows[0]?.color }]}>{rows[0]?.count ?? 0}</RNText>
-          <RNText style={styles.mfrSummaryLabel}>Máquinas del{'\n'}líder ({rows[0]?.mfr ?? '—'})</RNText>
+        <View style={[styles.mfrSummaryCard, { borderLeftColor: leader?.color, borderLeftWidth: 4 }]}>
+          <RNText style={[styles.mfrSummaryNum, { color: leader?.color }]}>{leader?.count ?? 0}</RNText>
+          <RNText style={styles.mfrSummaryLabel}>Máquinas del{'\n'}líder ({leader?.mfr ?? '—'})</RNText>
         </View>
         <View style={styles.mfrSummaryCard}>
-          <RNText style={[styles.mfrSummaryNum, { color: C.green }]}>{money(rows[0]?.avgWin ?? 0, 0)}</RNText>
+          <RNText style={[styles.mfrSummaryNum, { color: C.green }]}>{money(leader?.avgWin ?? 0, 0)}</RNText>
           <RNText style={styles.mfrSummaryLabel}>Mejor Avg{'\n'}Win PD</RNText>
+        </View>
+      </View>
+
+      {/* Sort control */}
+      <View style={styles.mfrSortRow}>
+        <RNText style={styles.mfrSortLabel}>Ordenar por:</RNText>
+        <View style={styles.mfrSortPills}>
+          {MFR_SORT_OPTIONS.map(opt => {
+            const active = sortKey === opt.id;
+            return (
+              <Pressable
+                key={opt.id}
+                style={[styles.mfrSortPill, active && styles.mfrSortPillActive]}
+                onPress={() => setSortKey(opt.id)}
+              >
+                <RNText style={[styles.mfrSortPillText, active && styles.mfrSortPillTextActive]}>
+                  {opt.label}
+                </RNText>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
@@ -442,7 +478,7 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
                     <RNText style={styles.mfrCardName}>{r.mfr}</RNText>
                     {idx === 0 && (
                       <View style={styles.mfrTopBadge}>
-                        <RNText style={styles.mfrTopBadgeText}>🏆 Mejor CI PD</RNText>
+                        <RNText style={styles.mfrTopBadgeText}>{topBadge}</RNText>
                       </View>
                     )}
                   </View>
@@ -823,6 +859,7 @@ const CAMBIOS_KPI_DEFS = [
 
 function CambiosSection({ gutter }: { gutter: number }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
   const summary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -831,23 +868,44 @@ function CambiosSection({ gutter }: { gutter: number }) {
     return counts;
   }, [changes]);
 
+  // Filter by type (tapping a KPI card), then group by recorded date.
+  const dateGroups = useMemo(() => {
+    const filtered = typeFilter ? changes.filter(c => c.type === typeFilter) : changes;
+    const map = new Map<string, MachineChange[]>();
+    for (const c of filtered) {
+      const key = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : 'Sin fecha';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+    return Array.from(map.entries());
+  }, [changes, typeFilter]);
+
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* KPI dashboard */}
+      {/* KPI dashboard — tap a card to filter the log by that type */}
       {changes.length > 0 && (
         <View style={styles.cambiosKpiGrid}>
           {CAMBIOS_KPI_DEFS.map(({ type, icon, label }) => {
             const color = CHANGE_COLORS[type] ?? C.navy3;
+            const active = typeFilter === type;
             return (
-              <View key={type} style={[styles.cambiosKpiCard, { borderLeftColor: color }]}>
+              <Pressable
+                key={type}
+                style={[
+                  styles.cambiosKpiCard,
+                  { borderLeftColor: color },
+                  active && { backgroundColor: color + '14', borderColor: color + '66', borderWidth: 1, borderLeftWidth: 4 },
+                ]}
+                onPress={() => setTypeFilter(active ? null : type)}
+              >
                 <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
                   <Ionicons name={icon} size={22} color={color} />
                 </View>
                 <View style={styles.cambiosKpiBody}>
                   <RNText style={[styles.cambiosKpiCount, { color }]}>{summary[type]}</RNText>
-                  <RNText style={styles.cambiosKpiLabel}>{label}</RNText>
+                  <RNText style={styles.cambiosKpiLabel}>{label}{active ? ' ✓' : ''}</RNText>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -860,11 +918,30 @@ function CambiosSection({ gutter }: { gutter: number }) {
           <RNText style={styles.emptyBody}>Los cambios se registran automáticamente al editar una máquina.</RNText>
         </View>
       ) : (
-        <View style={[card.base, { padding: 0, overflow: 'hidden' }]}>
-          {changes.map((c, i) => (
-            <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} />
+        <>
+          {typeFilter && (
+            <RNText style={styles.cambiosFilterNote}>
+              Mostrando solo {CHANGE_LABELS[typeFilter]?.toLowerCase() ?? typeFilter} — toca la tarjeta de nuevo para ver todos
+            </RNText>
+          )}
+          {dateGroups.map(([date, group]) => (
+            <View key={date} style={{ gap: 8 }}>
+              <View style={styles.cambiosDateHeader}>
+                <Ionicons name="calendar-clear-outline" size={12} color={C.muted} />
+                <RNText style={styles.cambiosDateText}>{date}</RNText>
+                <RNText style={styles.cambiosDateCount}>{group.length} {group.length === 1 ? 'cambio' : 'cambios'}</RNText>
+              </View>
+              <View style={[card.base, { padding: 0, overflow: 'hidden' }]}>
+                {group.map((c, i) => (
+                  <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} />
+                ))}
+              </View>
+            </View>
           ))}
-        </View>
+          {dateGroups.length === 0 && (
+            <RNText style={styles.empty}>No hay cambios de este tipo</RNText>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -1520,6 +1597,19 @@ const styles = StyleSheet.create({
   cambiosKpiCount: { fontSize: 30, fontWeight: '800', lineHeight: 34 },
   cambiosKpiLabel: { fontSize: 12, color: C.muted, fontWeight: '600', marginTop: 2 },
 
+  cambiosFilterNote: {
+    fontSize: 12, color: C.muted, fontStyle: 'italic',
+  },
+  cambiosDateHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2,
+  },
+  cambiosDateText: {
+    fontSize: 12, fontWeight: '800', color: C.navy3, letterSpacing: 0.3,
+  },
+  cambiosDateCount: {
+    fontSize: 11, color: C.faint,
+  },
+
   changeRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
     paddingHorizontal: 16, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
@@ -1564,6 +1654,17 @@ const styles = StyleSheet.create({
     fontSize: 30, fontWeight: '900', color: C.navy, letterSpacing: -1,
   },
   mfrSummaryLabel: { fontSize: 11, color: C.muted, lineHeight: 15 },
+
+  mfrSortRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  mfrSortLabel: { fontSize: 12, fontWeight: '600', color: C.muted },
+  mfrSortPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  mfrSortPill: {
+    borderRadius: 999, paddingHorizontal: 13, paddingVertical: 6,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+  },
+  mfrSortPillActive:     { backgroundColor: C.navy, borderColor: C.navy },
+  mfrSortPillText:       { fontSize: 12, fontWeight: '600', color: C.muted },
+  mfrSortPillTextActive: { color: '#fff' },
 
   mfrCard: {
     backgroundColor: C.card, borderRadius: 16, overflow: 'hidden',

@@ -20,6 +20,19 @@ type Props = {
 const HEAT_COLORS = ['#e3b1b1', '#e6c3a4', '#e0d4a8', '#bcdcae', '#8cc97f'];
 const NO_DATA_BG  = '#eef1f4';
 
+// Delta-vs-2025 buckets: <−20% · −20..0 · 0..+20 · >+20 (diverging, muted).
+const DELTA_COLORS = ['#e3a8a8', '#eccfc4', '#cfe4c4', '#93cc85'];
+const DELTA_LABELS = ['< −20%', '−20–0%', '0–+20%', '> +20%'];
+
+function deltaBucket(delta: number): number {
+  if (delta < -20) return 0;
+  if (delta < 0)   return 1;
+  if (delta <= 20) return 2;
+  return 3;
+}
+
+type HeatMode = 'perf' | 'delta';
+
 function metricOf(g: BankGroup, metric: Metric): number {
   return metric === 'avgWin' ? g.avgWin : g.avgCoinIn;
 }
@@ -41,10 +54,18 @@ function bankDelta2025(g: BankGroup, metric: Metric): number | null {
 
 export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [mode, setMode] = useState<HeatMode>('perf');
   const { width } = useWindowDimensions();
   const isWide = width >= 640;
 
   const byBankNum = useMemo(() => new Map(groups.map(g => [g.bankNum, g])), [groups]);
+
+  // Delta vs 2025 per bank (null when nothing comparable) for the delta mode.
+  const deltas = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const g of groups) map.set(g.bankNum, bankDelta2025(g, metric));
+    return map;
+  }, [groups, metric]);
 
   // Quintile per bank: rank within the banks that have data for the metric.
   const quintiles = useMemo(() => {
@@ -93,6 +114,22 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
 
   return (
     <View style={{ gap: 14 }}>
+      {/* Color-mode toggle: absolute performance vs delta against 2025 */}
+      <View style={styles.modeRow}>
+        <Pressable
+          style={[styles.modeBtn, mode === 'perf' && styles.modeBtnActive]}
+          onPress={() => setMode('perf')}
+        >
+          <Text style={[styles.modeBtnText, mode === 'perf' && styles.modeBtnTextActive]}>Rendimiento actual</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.modeBtn, mode === 'delta' && styles.modeBtnActive]}
+          onPress={() => setMode('delta')}
+        >
+          <Text style={[styles.modeBtnText, mode === 'delta' && styles.modeBtnTextActive]}>Δ vs 2025</Text>
+        </Pressable>
+      </View>
+
       {/* Grid */}
       <View style={styles.grid}>
         {rows.map((rowCells, ri) => (
@@ -101,16 +138,29 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
               const cell = rowCells.find(c => c.col === col);
               if (!cell) return <View key={col} style={styles.cellSlot} />;
               const group = byBankNum.get(cell.bank);
-              const q = group ? quintiles.get(cell.bank) : undefined;
-              const bg = q != null ? HEAT_COLORS[q] : NO_DATA_BG;
-              const noData = q == null;
+              let bg = NO_DATA_BG;
+              let noData = true;
+              let sub = group ? `${group.machines.length} máq` : null;
+              if (group) {
+                if (mode === 'perf') {
+                  const q = quintiles.get(cell.bank);
+                  if (q != null) { bg = HEAT_COLORS[q]; noData = false; }
+                } else {
+                  const d = deltas.get(cell.bank);
+                  if (d != null) {
+                    bg = DELTA_COLORS[deltaBucket(d)];
+                    noData = false;
+                    sub = `${d >= 0 ? '+' : ''}${d.toFixed(0)}%`;
+                  }
+                }
+              }
               const isSel = group != null && group.bank === selected;
               return (
                 <View key={col} style={styles.cellSlot}>
                   <Pressable
                     style={[
                       styles.cell,
-                      { backgroundColor: noData ? NO_DATA_BG : bg },
+                      { backgroundColor: bg },
                       isSel && styles.cellSelected,
                       !group && styles.cellAbsent,
                     ]}
@@ -120,10 +170,8 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
                     <Text style={[styles.cellBank, noData && styles.cellBankNoData]}>
                       {String(cell.bank).padStart(2, '0')}
                     </Text>
-                    {group ? (
-                      <Text style={[styles.cellCount, noData && styles.cellBankNoData]}>
-                        {group.machines.length} máq
-                      </Text>
+                    {sub ? (
+                      <Text style={[styles.cellCount, noData && styles.cellBankNoData]}>{sub}</Text>
                     ) : null}
                   </Pressable>
                 </View>
@@ -135,15 +183,31 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
 
       {/* Legend */}
       <View style={[styles.legend, !isWide && { flexWrap: 'wrap' }]}>
-        <Text style={styles.legendLabel}>{metricLabel} del banco:</Text>
-        <View style={styles.legendScale}>
-          <Text style={styles.legendEnd}>Bajo</Text>
-          {HEAT_COLORS.map(c => <View key={c} style={[styles.legendSwatch, { backgroundColor: c }]} />)}
-          <Text style={styles.legendEnd}>Alto</Text>
-        </View>
+        {mode === 'perf' ? (
+          <>
+            <Text style={styles.legendLabel}>{metricLabel} del banco:</Text>
+            <View style={styles.legendScale}>
+              <Text style={styles.legendEnd}>Bajo</Text>
+              {HEAT_COLORS.map(c => <View key={c} style={[styles.legendSwatch, { backgroundColor: c }]} />)}
+              <Text style={styles.legendEnd}>Alto</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.legendLabel}>Δ {metricLabel} vs 2025:</Text>
+            <View style={styles.legendScale}>
+              {DELTA_COLORS.map((c, i) => (
+                <View key={c} style={styles.legendScale}>
+                  <View style={[styles.legendSwatch, { backgroundColor: c }]} />
+                  <Text style={styles.legendEnd}>{DELTA_LABELS[i]}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
         <View style={styles.legendScale}>
           <View style={[styles.legendSwatch, { backgroundColor: NO_DATA_BG }]} />
-          <Text style={styles.legendEnd}>Sin datos</Text>
+          <Text style={styles.legendEnd}>{mode === 'perf' ? 'Sin datos' : 'Sin dato 2025'}</Text>
         </View>
       </View>
 
@@ -197,6 +261,22 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
 }
 
 const styles = StyleSheet.create({
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeBtn: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modeBtnActive:     { backgroundColor: C.navy, borderColor: C.navy },
+  modeBtnText:       { fontSize: 12, fontWeight: '600', color: C.muted },
+  modeBtnTextActive: { color: '#fff' },
+
   grid: {
     backgroundColor: C.card,
     borderRadius: 16,

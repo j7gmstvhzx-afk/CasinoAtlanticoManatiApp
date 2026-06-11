@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money, mfrColor, shortMfr, bankOf } from './shared';
+import { DeltaBar } from './DeltaBar';
 import { SLOT_FLOOR_2025, type SlotEntry2025 } from '@/data/slotFloor2025';
 import type { SlotMachine } from '@/types/domain';
 
@@ -101,6 +103,7 @@ function CompareMetric({ label, then, now, accent, active }: { label: string; th
         <Ionicons name="arrow-forward" size={11} color={C.faint} style={{ marginHorizontal: 4 }} />
         <Text style={[styles.metricNow, { color: accent }]}>{money(now, 0)}</Text>
       </View>
+      <DeltaBar then={then} now={now} width="100%" />
       <DeltaChip d={d} />
     </View>
   );
@@ -155,6 +158,7 @@ function MiniDelta({ label, then, now, color }: { label: string; then: number; n
         <Ionicons name="arrow-forward" size={9} color={C.faint} style={{ marginHorizontal: 3 }} />
         <Text style={[styles.miniNow, { color }]}>{money(now, 0)}</Text>
       </View>
+      <DeltaBar then={then} now={now} />
       <DeltaChip d={d} compact />
     </View>
   );
@@ -196,13 +200,13 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
       </Pressable>
 
       {expanded && (
-        <View style={styles.machineList}>
+        <Animated.View entering={FadeIn.duration(160)} style={styles.machineList}>
           <View style={styles.machineListHeader}>
             <Text style={styles.mlhText}>Posición · Juego · Fabricante</Text>
             <Text style={styles.mlhText}>2025 → Actual · Diferencia (fluctuación)</Text>
           </View>
           {group.rows.map(row => <CompareRow key={row.machine.id} row={row} />)}
-        </View>
+        </Animated.View>
       )}
     </View>
   );

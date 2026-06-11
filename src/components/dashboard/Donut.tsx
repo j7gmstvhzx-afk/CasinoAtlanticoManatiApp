@@ -1,15 +1,18 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Text } from '@/components/ui';
 import { C } from './shared';
 
-export type DonutItem = { label: string; value: number; color: string };
+// `key` carries the full identifier (e.g. manufacturer name) when `label` is a
+// shortened display form — press callbacks receive key ?? label.
+export type DonutItem = { label: string; value: number; color: string; key?: string };
 
 type Props = {
   data: DonutItem[];
   size?: number;
   showPct?: boolean;
+  onSlicePress?: (key: string) => void;
 };
 
 function polar(cx: number, cy: number, r: number, deg: number) {
@@ -24,7 +27,7 @@ function arc(cx: number, cy: number, r: number, start: number, end: number): str
   return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 0 ${e.x} ${e.y} L ${cx} ${cy} Z`;
 }
 
-export function Donut({ data, size = 150, showPct = true }: Props) {
+export function Donut({ data, size = 150, showPct = true, onSlicePress }: Props) {
   const cx = size / 2;
   const cy = size / 2;
   const outerR = size / 2 - 4;
@@ -43,7 +46,12 @@ export function Donut({ data, size = 150, showPct = true }: Props) {
     <View style={styles.root}>
       <Svg width={size} height={size}>
         {slices.map((s, i) => (
-          <Path key={i} d={arc(cx, cy, outerR, s.start, s.end)} fill={s.color} />
+          <Path
+            key={i}
+            d={arc(cx, cy, outerR, s.start, s.end)}
+            fill={s.color}
+            onPress={onSlicePress ? () => onSlicePress(s.key ?? s.label) : undefined}
+          />
         ))}
         <Circle cx={cx} cy={cy} r={innerR} fill={C.card} />
       </Svg>
@@ -51,14 +59,25 @@ export function Donut({ data, size = 150, showPct = true }: Props) {
       <View style={styles.legend}>
         {data.map(item => {
           const pct = total > 0 ? (item.value / total) * 100 : 0;
-          return (
-            <View key={item.label} style={styles.row}>
+          const inner = (
+            <>
               <View style={[styles.dot, { backgroundColor: item.color }]} />
               <Text style={styles.label} numberOfLines={1}>{item.label}</Text>
               <Text style={styles.value}>
                 {item.value}{showPct ? <Text style={styles.pct}>  ({pct.toFixed(1)}%)</Text> : null}
               </Text>
-            </View>
+            </>
+          );
+          return onSlicePress ? (
+            <Pressable
+              key={item.label}
+              style={({ pressed }) => [styles.row, styles.rowPressable, pressed && { opacity: 0.6 }]}
+              onPress={() => onSlicePress(item.key ?? item.label)}
+            >
+              {inner}
+            </Pressable>
+          ) : (
+            <View key={item.label} style={styles.row}>{inner}</View>
           );
         })}
       </View>
@@ -81,6 +100,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  rowPressable: {
+    cursor: 'pointer',
+  } as any,
   dot: {
     width: 12,
     height: 12,

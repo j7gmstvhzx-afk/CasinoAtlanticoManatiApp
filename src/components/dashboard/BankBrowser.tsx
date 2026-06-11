@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money } from './shared';
@@ -11,6 +12,10 @@ type Props = {
   groups: BankGroup[];
   rankMetric: 'avgWin' | 'avgCoinIn';
   onEdit: (m: SlotMachine) => void;
+  // Drill-down target (e.g. from the floor heatmap): auto-expands that bank.
+  focusBank?: string | null;
+  // Reports each card's y-offset so the parent ScrollView can jump to it.
+  onBankLayout?: (bank: string, y: number) => void;
 };
 
 type RankInfo = { label: string; color: string; border: string };
@@ -28,21 +33,30 @@ type CardProps = {
   total: number;
   rankMetric: 'avgWin' | 'avgCoinIn';
   onEdit: (m: SlotMachine) => void;
+  focused?: boolean;
+  onLayoutY?: (y: number) => void;
 };
 
-function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
+function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }: CardProps) {
   const [expanded, setExpanded] = useState(false);
   const ri   = rankInfo(rank, total);
   const bank = group.bank.padStart(2, '0');
   const { width } = useWindowDimensions();
   const isWide = width >= 640;
 
+  useEffect(() => {
+    if (focused) setExpanded(true);
+  }, [focused]);
+
   // Headline metrics: Avg Coin-In / Avg Win PER MACHINE — what actually ranks the bank
   const avgCILabel  = isWide ? 'Avg Coin-In PD del Banco' : 'Avg CI PD/máq';
   const avgWinLabel = isWide ? 'Avg Win PD del Banco' : 'Avg Win PD/máq';
 
   return (
-    <View style={[styles.card, ri && rank <= 3 && styles.cardTop]}>
+    <View
+      style={[styles.card, ri && rank <= 3 && styles.cardTop, focused && styles.cardFocused]}
+      onLayout={onLayoutY ? e => onLayoutY(e.nativeEvent.layout.y) : undefined}
+    >
       <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)} android_ripple={{ color: '#f0f0f0' }}>
         {/* Left: bank number badge */}
         <View style={[styles.bankBadge, rank <= 3 && styles.bankBadgeTop]}>
@@ -77,7 +91,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
       </Pressable>
 
       {expanded && (
-        <View style={styles.machineList}>
+        <Animated.View entering={FadeIn.duration(160)} style={styles.machineList}>
           <View style={styles.machineListHeader}>
             <Text style={styles.mlhText}>Posición · Juego · Fabricante</Text>
             <Text style={[styles.mlhText, { marginRight: 8 }]}>CI PD · Win PD · WWCJPR PD · Max Bet</Text>
@@ -91,13 +105,13 @@ function BankCard({ group, rank, total, rankMetric, onEdit }: CardProps) {
             .map(m => (
               <MachineRow key={m.id} machine={m} onEdit={onEdit} />
             ))}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
 }
 
-export function BankBrowser({ groups, rankMetric, onEdit }: Props) {
+export function BankBrowser({ groups, rankMetric, onEdit, focusBank, onBankLayout }: Props) {
   const rankMap = useMemo(() => {
     const sorted = [...groups].sort((a, b) =>
       rankMetric === 'avgWin' ? b.avgWin - a.avgWin : b.avgCoinIn - a.avgCoinIn
@@ -115,6 +129,8 @@ export function BankBrowser({ groups, rankMetric, onEdit }: Props) {
           total={groups.length}
           rankMetric={rankMetric}
           onEdit={onEdit}
+          focused={focusBank === group.bank}
+          onLayoutY={onBankLayout ? y => onBankLayout(group.bank, y) : undefined}
         />
       ))}
     </View>
@@ -137,6 +153,10 @@ const styles = StyleSheet.create({
   cardTop: {
     borderColor: '#f0d090',
     shadowOpacity: 0.12,
+  },
+  cardFocused: {
+    borderColor: C.navy,
+    borderWidth: 2,
   },
   cardHeader: {
     flexDirection: 'row',

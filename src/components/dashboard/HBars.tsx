@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
 import { C } from './shared';
 
@@ -18,6 +18,19 @@ type Props = {
   onPress?: (key: string) => void;
 };
 
+// Bar fill animates from 0 on mount, staggered top→bottom.
+function AnimatedFill({ pct, color, delay }: { pct: number; color: string; delay: number }) {
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withDelay(delay, withTiming(pct, { duration: 360 }));
+  }, [pct, delay, width]);
+
+  const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
+
+  return <Animated.View style={[styles.fill, { backgroundColor: color }, animated]} />;
+}
+
 export function HBars({ data, barColor = C.navy, onPress }: Props) {
   const { width } = useWindowDimensions();
   const labelW = width >= 1024 ? 180 : width >= 640 ? 130 : 96;
@@ -26,24 +39,30 @@ export function HBars({ data, barColor = C.navy, onPress }: Props) {
 
   return (
     <View style={{ gap: 12 }}>
-      {data.map(item => {
+      {data.map((item, i) => {
         const pct = Math.max((item.value / max) * 100, 2);
         const fill = item.color ?? barColor;
-        const Row = onPress ? Pressable : View;
-        return (
-          <Row
-            key={item.key}
-            style={styles.row}
-            onPress={onPress ? () => onPress(item.key) : undefined}
-          >
+        const row = (
+          <>
             <Text style={[styles.label, { width: labelW }]} numberOfLines={1}>{item.label}</Text>
             <View style={styles.trackWrap}>
               <View style={styles.track}>
-                <View style={[styles.fill, { width: `${pct}%` as any, backgroundColor: fill }]} />
+                <AnimatedFill pct={pct} color={fill} delay={i * 40} />
               </View>
             </View>
             <Text style={[styles.value, { width: valueW }]} numberOfLines={1}>{item.display}</Text>
-          </Row>
+          </>
+        );
+        return onPress ? (
+          <Pressable
+            key={item.key}
+            style={({ pressed }) => [styles.row, styles.rowPressable, pressed && { opacity: 0.6 }]}
+            onPress={() => onPress(item.key)}
+          >
+            {row}
+          </Pressable>
+        ) : (
+          <View key={item.key} style={styles.row}>{row}</View>
         );
       })}
     </View>
@@ -56,6 +75,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  rowPressable: {
+    cursor: 'pointer',
+  } as any,
   label: {
     fontSize: 13,
     fontWeight: '600',

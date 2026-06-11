@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView,
-  StyleSheet, Switch, Text as RNText, View,
+  Pressable, ScrollView,
+  StyleSheet, Switch, Text as RNText, TextInput, View,
   useWindowDimensions,
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSlotFloorStore, useActiveMachines } from '@/store/useSlotFloorStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { Skeleton } from '@/components/ui';
 import { MachineEditSheet } from '@/components/slotfloor/MachineEditSheet';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { HBars, type HBarItem } from '@/components/dashboard/HBars';
@@ -15,6 +17,7 @@ import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
+import { FloorHeatmap } from '@/components/dashboard/FloorHeatmap';
 import { MachineRow } from '@/components/dashboard/MachineRow';
 import { C, CHIP_BLUE, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
@@ -24,6 +27,7 @@ type Metric = 'avgCoinIn' | 'avgWin';
 
 const TABS = [
   { key: 'resumen',      label: 'Resumen' },
+  { key: 'plano',        label: 'Plano' },
   { key: 'bancos',       label: 'Bancos' },
   { key: 'comparativa',  label: 'Comparativa vs 2025' },
   { key: 'fabricantes',  label: 'Fabricantes' },
@@ -46,7 +50,11 @@ const CHANGE_COLORS: Record<string, string> = {
 
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
-function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
+function ResumeSection({ metric, gutter, onOpenBank, onOpenMfr }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+  onOpenMfr: (mfr: string) => void;
+}) {
   const machines = useActiveMachines();
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
@@ -58,7 +66,7 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     for (const m of machines) map.set(m.manufacturer, (map.get(m.manufacturer) ?? 0) + 1);
     return Array.from(map.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([name, count], idx) => ({ label: shortMfr(name), value: count, color: mfrColor(name, idx) }));
+      .map(([name, count], idx) => ({ label: shortMfr(name), key: name, value: count, color: mfrColor(name, idx) }));
   }, [machines]);
 
   const bestBars: HBarItem[] = best.map(g => ({
@@ -99,24 +107,48 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
       {/* Best 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Top 5 Mejores Bancos</RNText></View>
-        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
-        {bestBars.length ? <HBars data={bestBars} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'} · toca un banco para ver su detalle</RNText>
+        {bestBars.length ? <HBars data={bestBars} onPress={onOpenBank} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       {/* Worst 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={[card.accent, { backgroundColor: C.red }]} /><RNText style={card.title}>Top 5 Peores Bancos</RNText></View>
-        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
-        {worstBars.length ? <HBars data={worstBars} barColor={C.red} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'} · toca un banco para ver su detalle</RNText>
+        {worstBars.length ? <HBars data={worstBars} barColor={C.red} onPress={onOpenBank} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       {/* Manufacturer donut */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Distribución por Fabricante</RNText></View>
-        {distData.length ? <Donut data={distData} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        {distData.length ? <Donut data={distData} onSlicePress={onOpenMfr} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       <RNText style={styles.footer}>Casino Atlántico Manatí · Operaciones de Piso</RNText>
+    </ScrollView>
+  );
+}
+
+// ── Section: Plano (floor heatmap) ────────────────────────────────────────────
+
+function PlanoSection({ metric, gutter, onOpenBank }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+}) {
+  const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
+  const machines      = useSlotFloorStore(s => s.machines);
+  const groups        = useMemo(() => getBankGroups(), [machines, getBankGroups]);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <RNText style={styles.sectionIntro}>
+        Mapa de calor del piso: cada celda es un banco, coloreado por su{' '}
+        <RNText style={{ fontWeight: '700' }}>{metric === 'avgWin' ? 'Avg Win PD' : 'Avg Coin-In PD'}</RNText>{' '}
+        en quintiles — de rojo (más bajo) a verde (más alto). Usa el interruptor Coin-In/Win
+        del encabezado para cambiar la métrica.
+      </RNText>
+      <FloorHeatmap groups={groups} metric={metric} onOpenBank={onOpenBank} />
+      <RNText style={styles.footer}>Casino Atlántico Manatí · Plano de rendimiento por banco</RNText>
     </ScrollView>
   );
 }
@@ -133,13 +165,30 @@ const BANK_FILTERS: FilterDef[] = [
   { id: 'win100', label: 'Win < $100',   type: 'win',    max: 100  },
 ];
 
-function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number }) {
+function BancosSection({ metric, onEdit, gutter, focusBank }: {
+  metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number;
+  focusBank?: string | null;
+}) {
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
   const machines      = useSlotFloorStore(s => s.machines);
   const groups        = getBankGroups();
 
   const [filterId, setFilterId] = useState<string | null>(null);
   const activeFilter = BANK_FILTERS.find(f => f.id === filterId) ?? null;
+
+  // Drill-down from Plano/Resumen: clear any filter and scroll to the bank
+  // once its card has reported its position.
+  const scrollRef = useRef<ScrollView>(null);
+  const bankYs    = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!focusBank) return;
+    setFilterId(null);
+    const t = setTimeout(() => {
+      const y = bankYs.current[focusBank];
+      if (y != null) scrollRef.current?.scrollTo({ y: Math.max(y + gutter - 12, 0), animated: true });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [focusBank, gutter]);
 
   const filteredMachines = useMemo(() => {
     if (!activeFilter) return [];
@@ -207,8 +256,14 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
         </ScrollView>
       ) : (
         /* Normal bank cards view */
-        <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-          <BankBrowser groups={groups} rankMetric={metric} onEdit={onEdit} />
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+          <BankBrowser
+            groups={groups}
+            rankMetric={metric}
+            onEdit={onEdit}
+            focusBank={focusBank}
+            onBankLayout={(bank, y) => { bankYs.current[bank] = y; }}
+          />
           <RNText style={styles.footer}>{groups.length} bancos · {groups.reduce((s, g) => s + g.machines.length, 0)} máquinas</RNText>
         </ScrollView>
       )}
@@ -231,7 +286,7 @@ function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number
 
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
-function FabricantesSection({ gutter }: { gutter: number }) {
+function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highlightMfr?: string | null }) {
   const machines = useActiveMachines();
   const floorStats = useSlotFloorStore(s => s.floorStats);
 
@@ -291,7 +346,7 @@ function FabricantesSection({ gutter }: { gutter: number }) {
         const abovePct  = r.vsFloor - 100;
         const fillWidth = Math.min(Math.max(r.vsFloor, 10), 190) / 190;
         return (
-          <View key={r.mfr} style={[styles.mfrCard, idx === 0 && styles.mfrCardTop]}>
+          <View key={r.mfr} style={[styles.mfrCard, idx === 0 && styles.mfrCardTop, highlightMfr === r.mfr && styles.mfrCardFocused]}>
 
             {/* Header: color bar + name + count */}
             <View style={[styles.mfrColorStripe, { backgroundColor: r.color }]} />
@@ -766,17 +821,86 @@ function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) 
   );
 }
 
+// ── Global search results ─────────────────────────────────────────────────────
+
+const SEARCH_LIMIT = 50;
+
+function SearchResults({ gutter, onEdit }: { gutter: number; onEdit: (m: SlotMachine) => void }) {
+  const query    = useSlotFloorStore(s => s.explorerSearch);
+  const machines = useSlotFloorStore(s => s.machines);
+  const getFilteredMachines = useSlotFloorStore(s => s.getFilteredMachines);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const all = useMemo(() => getFilteredMachines(), [machines, query]);
+  const results = all.slice(0, SEARCH_LIMIT);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <View style={styles.filterResultHeader}>
+        <RNText style={styles.filterResultTitle}>
+          {all.length} {all.length === 1 ? 'resultado' : 'resultados'} para “{query.trim()}”
+        </RNText>
+        <RNText style={styles.filterResultSub}>
+          Búsqueda por ID, juego, fabricante o ubicación
+          {all.length > SEARCH_LIMIT ? ` · mostrando las primeras ${SEARCH_LIMIT}` : ''}
+        </RNText>
+      </View>
+      <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
+        {results.map(m => (
+          <MachineRow key={m.id} machine={m} onEdit={onEdit} />
+        ))}
+        {results.length === 0 && (
+          <RNText style={styles.empty}>Sin coincidencias — intenta con el ID, el juego o la ubicación (ej. 09-01)</RNText>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+
+const SKELETON_TINT = { backgroundColor: C.track };
+
+function DashboardSkeleton({ gutter }: { gutter: number }) {
+  return (
+    <View style={{ padding: gutter, gap: 14 }}>
+      <View style={styles.kpiGrid}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <View key={i} style={styles.skelKpi}>
+            <Skeleton width={36} height={36} rounded="md" style={SKELETON_TINT} />
+            <Skeleton width="70%" height={22} style={SKELETON_TINT} />
+            <Skeleton width="50%" height={12} style={SKELETON_TINT} />
+          </View>
+        ))}
+      </View>
+      {[0, 1].map(i => (
+        <View key={i} style={styles.skelCard}>
+          <Skeleton width="40%" height={16} style={SKELETON_TINT} />
+          <Skeleton width="100%" height={28} style={SKELETON_TINT} />
+          <Skeleton width="85%" height={28} style={SKELETON_TINT} />
+          <Skeleton width="70%" height={28} style={SKELETON_TINT} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ── Root screen ───────────────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
   const [tab, setTab]              = useState('resumen');
   const [metric, setMetric]        = useState<Metric>('avgCoinIn');
   const [editMachine, setEditMachine] = useState<SlotMachine | null>(null);
+  const [searchOpen, setSearchOpen]   = useState(false);
+  const [focusBank, setFocusBank]     = useState<string | null>(null);
+  const [focusMfr, setFocusMfr]       = useState<string | null>(null);
 
   const init          = useSlotFloorStore(s => s.init);
   const initialized   = useSlotFloorStore(s => s.initialized);
   const machines      = useActiveMachines();
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
+  const explorerSearch    = useSlotFloorStore(s => s.explorerSearch);
+  const setExplorerSearch = useSlotFloorStore(s => s.setExplorerSearch);
   const profile       = useAuthStore(s => s.profile);
   const signOut       = useAuthStore(s => s.signOut);
 
@@ -796,7 +920,18 @@ export default function DashboardScreen() {
     });
   };
 
-  const showMetricToggle = tab === 'resumen' || tab === 'bancos' || tab === 'comparativa';
+  // Cross-filtering: charts and the heatmap jump into the relevant tab.
+  const openBank = (bank: string) => { setFocusBank(bank); setTab('bancos'); };
+  const openMfr  = (mfr: string)  => { setFocusMfr(mfr); setTab('fabricantes'); };
+  const handleTabChange = (t: string) => {
+    if (t !== 'bancos')      setFocusBank(null);
+    if (t !== 'fabricantes') setFocusMfr(null);
+    setTab(t);
+  };
+  const closeSearch = () => { setSearchOpen(false); setExplorerSearch(''); };
+
+  const searching = searchOpen && explorerSearch.trim().length >= 2;
+  const showMetricToggle = ['resumen', 'plano', 'bancos', 'comparativa'].includes(tab);
 
   return (
     <View style={styles.root}>
@@ -818,6 +953,14 @@ export default function DashboardScreen() {
             </View>
           </View>
           <View style={styles.topRight}>
+            <Pressable
+              onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+              hitSlop={8}
+              accessibilityLabel={searchOpen ? 'Cerrar búsqueda' : 'Buscar máquinas'}
+              style={[styles.searchBtn, searchOpen && styles.searchBtnActive]}
+            >
+              <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={searchOpen ? '#fff' : C.navy3} />
+            </Pressable>
             {showMetricToggle && (
               <View style={styles.metricToggle}>
                 <RNText style={[styles.metricLabel, metric === 'avgCoinIn' && styles.metricLabelActive]}>Coin-In</RNText>
@@ -848,24 +991,54 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Global search bar */}
+        {searchOpen && (
+          <View style={[styles.searchBar, { paddingHorizontal: gutter }]}>
+            <Ionicons name="search" size={16} color={C.muted} />
+            <TextInput
+              style={styles.searchInput}
+              value={explorerSearch}
+              onChangeText={setExplorerSearch}
+              placeholder="Buscar máquina por ID, juego, fabricante o ubicación (ej. 09-01)…"
+              placeholderTextColor={C.faint}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {explorerSearch.length > 0 && (
+              <Pressable onPress={() => setExplorerSearch('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={C.muted} />
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {/* Tabs */}
-        <SegmentedTabs tabs={TABS} active={tab} onChange={setTab} gutter={gutter} />
+        <SegmentedTabs tabs={TABS} active={tab} onChange={handleTabChange} gutter={gutter} />
       </SafeAreaView>
 
       {!initialized ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={C.gold} />
-          <RNText style={styles.loadingText}>Cargando datos del piso...</RNText>
-        </View>
+        <DashboardSkeleton gutter={gutter} />
       ) : (
-        <>
-          {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
-          {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
-          {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
-          {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
-          {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
-          {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
-        </>
+        <Animated.View
+          key={searching ? 'search' : tab}
+          entering={FadeIn.duration(240)}
+          style={{ flex: 1 }}
+        >
+          {searching ? (
+            <SearchResults gutter={gutter} onEdit={setEditMachine} />
+          ) : (
+            <>
+              {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} onOpenBank={openBank} onOpenMfr={openMfr} />}
+              {tab === 'plano'       && <PlanoSection metric={metric} gutter={gutter} onOpenBank={openBank} />}
+              {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} focusBank={focusBank} />}
+              {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
+              {tab === 'fabricantes' && <FabricantesSection gutter={gutter} highlightMfr={focusMfr} />}
+              {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
+              {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
+            </>
+          )}
+        </Animated.View>
       )}
 
       <MachineEditSheet
@@ -995,6 +1168,40 @@ const styles = StyleSheet.create({
 
   loading:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText:    { fontSize: 14, color: C.muted },
+
+  // ── Global search ───────────────────────────────────────────────────────────
+  searchBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.page, borderWidth: 1, borderColor: C.border,
+  },
+  searchBtnActive: {
+    backgroundColor: C.navy, borderColor: C.navy,
+  },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10,
+    backgroundColor: C.card,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: C.navy,
+    paddingVertical: 4,
+    ...(({ outlineStyle: 'none' } as any)),
+  },
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
+  skelKpi: {
+    flexGrow: 1, flexBasis: 200,
+    backgroundColor: C.card, borderRadius: 16, padding: 20, gap: 10,
+    borderWidth: 1, borderColor: C.border,
+  },
+  skelCard: {
+    backgroundColor: C.card, borderRadius: 16, padding: 20, gap: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
 
 
   // ── Apuestas sub-tabs ─────────────────────────────────────────────────────
@@ -1248,6 +1455,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
   },
   mfrCardTop: { borderColor: '#f0d090', shadowOpacity: 0.12 },
+  mfrCardFocused: { borderColor: C.navy, borderWidth: 2 },
   mfrColorStripe: { height: 5 },
   mfrCardInner: { padding: 16, gap: 14 },
 

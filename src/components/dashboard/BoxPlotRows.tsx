@@ -134,7 +134,7 @@ const LABEL_W = 118;
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    width: '100%',
     gap: 10,
     paddingVertical: 7,
     paddingHorizontal: 6,
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: C.text,
   },
-  labelCol: { width: LABEL_W },
+  labelCol: { width: LABEL_W, justifyContent: 'center' },
   label:    { fontSize: 12, fontWeight: '700', color: C.navy },
   sub:      { fontSize: 10, color: C.muted, marginTop: 1 },
   plot: {

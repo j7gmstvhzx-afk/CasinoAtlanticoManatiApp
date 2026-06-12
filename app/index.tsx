@@ -19,7 +19,12 @@ import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { FloorHeatmap } from '@/components/dashboard/FloorHeatmap';
 import { MachineRow } from '@/components/dashboard/MachineRow';
+import { Histogram } from '@/components/dashboard/Histogram';
+import { ScatterPlot, quadrantOf, QUADRANT_META, type ScatterPoint } from '@/components/dashboard/ScatterPlot';
+import { ParetoChart } from '@/components/dashboard/ParetoChart';
+import { BoxPlotRows, type BoxPlotGroup } from '@/components/dashboard/BoxPlotRows';
 import { C, CHIP_BLUE, card, money, mfrColor, shortMfr, bankOf } from '@/components/dashboard/shared';
+import { describe } from '@/lib/stats';
 import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
@@ -29,6 +34,7 @@ type Metric = 'avgCoinIn' | 'avgWin';
 const TABS = [
   { key: 'resumen',      label: 'Resumen' },
   { key: 'plano',        label: 'Plano' },
+  { key: 'analisis',     label: 'Análisis' },
   { key: 'bancos',       label: 'Bancos' },
   { key: 'comparativa',  label: 'Comparativa vs 2025' },
   { key: 'fabricantes',  label: 'Fabricantes' },
@@ -234,6 +240,308 @@ function PlanoSection({ metric, gutter, onOpenBank }: {
       </RNText>
       <FloorHeatmap groups={groups} metric={metric} onOpenBank={onOpenBank} />
       <RNText style={styles.footer}>Casino Atlántico Manatí · Plano de rendimiento por banco</RNText>
+    </ScrollView>
+  );
+}
+
+// ── Section: Análisis (estadística descriptiva para decisiones) ──────────────
+
+type Finding = { icon: keyof typeof Ionicons.glyphMap; color: string; text: React.ReactNode };
+
+function AnChartCard({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) {
+  return (
+    <View style={card.base}>
+      <View style={card.titleRow}>
+        <View style={card.accent} />
+        <RNText style={card.title}>{title}</RNText>
+      </View>
+      {children}
+      {note ? <RNText style={styles.anChartNote}>{note}</RNText> : null}
+    </View>
+  );
+}
+
+function AnalisisSection({ metric, gutter, onOpenBank }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+}) {
+  const machines = useActiveMachines();
+  const [selKey, setSelKey] = useState<string | null>(null);
+
+  const metricLabel = metric === 'avgWin' ? 'Avg Win PD' : 'Avg Coin-In PD';
+
+  const model = useMemo(() => {
+    // Machines with usable performance data for the active metric.
+    const withData = machines.filter(m => m.avgCoinIn != null && m.avgWin != null);
+    const pick = (m: SlotMachine) => (metric === 'avgWin' ? m.avgWin ?? 0 : m.avgCoinIn ?? 0);
+    const values = withData.map(pick);
+    const stats = describe(values);
+
+    // Scatter: volume (CI) vs hold (machine win%), split at the cloud means.
+    const points: ScatterPoint[] = withData
+      .filter(m => (m.avgCoinIn ?? 0) > 0)
+      .map(m => ({
+        key: m.id,
+        x: m.avgCoinIn ?? 0,
+        y: ((m.avgWin ?? 0) / (m.avgCoinIn ?? 1)) * 100,
+      }));
+    const xMid = points.length ? points.reduce((s, p) => s + p.x, 0) / points.length : 0;
+    const yMid = points.length ? points.reduce((s, p) => s + p.y, 0) / points.length : 0;
+    const quadCounts = { star: 0, volume: 0, hold: 0, low: 0 };
+    for (const p of points) quadCounts[quadrantOf(p, xMid, yMid)]++;
+
+    // Pareto: contribution of each bank to the floor total of the metric.
+    const bankTotals = new Map<string, number>();
+    for (const m of withData) {
+      const bank = bankOf(m.location);
+      bankTotals.set(bank, (bankTotals.get(bank) ?? 0) + pick(m));
+    }
+    const paretoItems = Array.from(bankTotals.entries()).map(([bank, value]) => ({
+      key: bank, label: bank, value,
+    }));
+    const sortedDesc = [...paretoItems].sort((a, b) => b.value - a.value);
+    const grandTotal = sortedDesc.reduce((s, i) => s + i.value, 0) || 1;
+    let acc = 0, coreCount = 0;
+    for (const item of sortedDesc) {
+      acc += item.value;
+      coreCount++;
+      if (acc / grandTotal > 0.8 && coreCount > 0) break;
+    }
+
+    // Box plots: spread per manufacturer.
+    const byMfr = new Map<string, number[]>();
+    for (const m of withData) {
+      if (!byMfr.has(m.manufacturer)) byMfr.set(m.manufacturer, []);
+      byMfr.get(m.manufacturer)!.push(pick(m));
+    }
+    const boxGroups: BoxPlotGroup[] = Array.from(byMfr.entries()).map(([mfr, vals], i) => ({
+      key: mfr, label: shortMfr(mfr), color: mfrColor(mfr, i), values: vals,
+    }));
+    const mfrMedians = boxGroups
+      .map(g => ({ mfr: g.label, median: describe(g.values).median, n: g.values.length }))
+      .sort((a, b) => b.median - a.median);
+
+    return { withData, values, stats, points, xMid, yMid, quadCounts, paretoItems, coreCount, nBanks: paretoItems.length, boxGroups, mfrMedians };
+  }, [machines, metric]);
+
+  const findings = useMemo<Finding[]>(() => {
+    const { stats, quadCounts, points, coreCount, nBanks, mfrMedians } = model;
+    if (stats.n === 0) return [];
+    const out: Finding[] = [];
+    const pctOf = (k: number) => points.length ? Math.round((k / points.length) * 100) : 0;
+
+    out.push({
+      icon: 'pie-chart-outline', color: C.navy,
+      text: <>De {nBanks} bancos, <RNText style={styles.anBold}>{coreCount} concentran el 80%</RNText> del {metricLabel} del piso — cualquier decisión de reubicación debe proteger primero a ese grupo.</>,
+    });
+
+    const cvTone = stats.cv > 60 ? C.red : stats.cv > 30 ? '#b45309' : C.green;
+    const cvWord = stats.cv > 60 ? 'alta' : stats.cv > 30 ? 'moderada' : 'baja';
+    out.push({
+      icon: 'pulse-outline', color: cvTone,
+      text: <>La dispersión del rendimiento es <RNText style={[styles.anBold, { color: cvTone }]}>{cvWord}</RNText> (coef. de variación {stats.cv.toFixed(0)}%): {stats.cv > 30 ? 'hay máquinas muy por encima y muy por debajo del promedio — el promedio solo no cuenta la historia.' : 'el piso rinde de forma pareja.'}</>,
+    });
+
+    const skew = stats.median > 0 ? ((stats.mean - stats.median) / stats.median) * 100 : 0;
+    if (skew > 10) {
+      out.push({
+        icon: 'analytics-outline', color: C.navy2,
+        text: <>La media ({money(stats.mean, 0)}) supera la mediana ({money(stats.median, 0)}) en {skew.toFixed(0)}% — pocas máquinas de alto volumen elevan el promedio. Usa la <RNText style={styles.anBold}>mediana</RNText> como referencia de la máquina "típica".</>,
+      });
+    }
+
+    if (quadCounts.low > 0) {
+      out.push({
+        icon: 'warning-outline', color: C.red,
+        text: <><RNText style={[styles.anBold, { color: C.red }]}>{quadCounts.low} máquinas ({pctOf(quadCounts.low)}%)</RNText> están bajo el promedio en volumen y retención — primeras candidatas a cambio de juego o reubicación.</>,
+      });
+    }
+    if (quadCounts.star > 0) {
+      out.push({
+        icon: 'star-outline', color: C.green,
+        text: <><RNText style={[styles.anBold, { color: C.green }]}>{quadCounts.star} máquinas ({pctOf(quadCounts.star)}%)</RNText> superan el promedio en ambas dimensiones — protege su ubicación y su juego actual.</>,
+      });
+    }
+
+    if (mfrMedians.length >= 2) {
+      const best = mfrMedians[0], worst = mfrMedians[mfrMedians.length - 1];
+      out.push({
+        icon: 'business-outline', color: C.navy3,
+        text: <>Por mediana, <RNText style={styles.anBold}>{best.mfr}</RNText> es el fabricante más sólido ({money(best.median, 0)}) y <RNText style={styles.anBold}>{worst.mfr}</RNText> el más débil ({money(worst.median, 0)}) en {metricLabel}.</>,
+      });
+    }
+    return out;
+  }, [model, metricLabel]);
+
+  const selected = useMemo(
+    () => (selKey ? model.withData.find(m => m.id === selKey) ?? null : null),
+    [selKey, model],
+  );
+
+  if (model.stats.n === 0) {
+    return (
+      <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.emptyState}>
+          <Ionicons name="stats-chart-outline" size={40} color={C.faint} />
+          <RNText style={styles.emptyTitle}>Sin datos de rendimiento</RNText>
+          <RNText style={styles.emptyBody}>Las estadísticas aparecerán cuando las máquinas tengan Coin-In y Win registrados.</RNText>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  const { stats } = model;
+  const statTiles: { label: string; value: string; hint?: string }[] = [
+    { label: 'Media',           value: money(stats.mean, 0),   hint: 'promedio simple' },
+    { label: 'Mediana',         value: money(stats.median, 0), hint: 'máquina típica' },
+    { label: 'Desv. estándar',  value: money(stats.sd, 0),     hint: 'variación promedio' },
+    { label: 'Coef. variación', value: `${stats.cv.toFixed(0)}%`, hint: 'dispersión relativa' },
+    { label: 'Cuartil 1 (25%)', value: money(stats.q1, 0),     hint: '25% rinde menos' },
+    { label: 'Cuartil 3 (75%)', value: money(stats.q3, 0),     hint: '25% rinde más' },
+    { label: 'Mínimo',          value: money(stats.min, 0) },
+    { label: 'Máximo',          value: money(stats.max, 0) },
+  ];
+
+  const selQuad = selected && (selected.avgCoinIn ?? 0) > 0
+    ? quadrantOf(
+        { x: selected.avgCoinIn ?? 0, y: ((selected.avgWin ?? 0) / (selected.avgCoinIn ?? 1)) * 100 },
+        model.xMid, model.yMid,
+      )
+    : null;
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <RNText style={styles.sectionIntro}>
+        Estadística descriptiva del piso sobre <RNText style={{ fontWeight: '700' }}>{metricLabel}</RNText> ({stats.n} máquinas
+        con datos). Cada gráfico responde una pregunta de gestión: ¿cómo se distribuye el rendimiento?, ¿qué máquinas combinan
+        volumen y retención?, ¿dónde se concentra el dinero?, ¿qué fabricante es consistente? Cambia la métrica con el
+        interruptor Coin-In/Win del encabezado.
+      </RNText>
+
+      {/* Hallazgos clave */}
+      <View style={[card.base, styles.anFindingsCard]}>
+        <View style={card.titleRow}>
+          <View style={card.accent} />
+          <RNText style={card.title}>Lecturas clave para decisiones</RNText>
+        </View>
+        <View style={{ gap: 12 }}>
+          {findings.map((f, i) => (
+            <View key={i} style={styles.anFindingRow}>
+              <View style={[styles.anFindingIcon, { backgroundColor: f.color + '15' }]}>
+                <Ionicons name={f.icon} size={15} color={f.color} />
+              </View>
+              <RNText style={styles.anFindingText}>{f.text}</RNText>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Resumen estadístico */}
+      <AnChartCard
+        title={`Resumen estadístico · ${metricLabel}`}
+        note="La media es sensible a valores extremos; la mediana no. Si difieren mucho, la distribución está sesgada y conviene citar ambas al presentar."
+      >
+        <View style={styles.anStatGrid}>
+          {statTiles.map(t => (
+            <View key={t.label} style={styles.anStatTile}>
+              <RNText style={styles.anStatValue}>{t.value}</RNText>
+              <RNText style={styles.anStatLabel}>{t.label}</RNText>
+              {t.hint ? <RNText style={styles.anStatHint}>{t.hint}</RNText> : null}
+            </View>
+          ))}
+        </View>
+      </AnChartCard>
+
+      {/* Distribución */}
+      <AnChartCard
+        title={`Distribución de máquinas · ${metricLabel}`}
+        note="Cada barra cuenta cuántas máquinas caen en ese rango. Una cola larga a la derecha significa que unas pocas máquinas generan mucho más que el resto."
+      >
+        <Histogram
+          values={model.values}
+          formatValue={v => money(v, 0)}
+          meanValue={stats.mean}
+          medianValue={stats.median}
+        />
+      </AnChartCard>
+
+      {/* Matriz volumen × retención */}
+      <AnChartCard
+        title="Matriz Volumen × Retención (por máquina)"
+        note="Derecha = más se apuesta en la máquina; arriba = el casino retiene un % mayor. Toca un punto para identificar la máquina."
+      >
+        <ScatterPlot
+          points={model.points}
+          xMid={model.xMid}
+          yMid={model.yMid}
+          xLabel="Avg Coin-In PD"
+          yLabel="Win % (retención)"
+          formatX={v => money(v, 0)}
+          formatY={v => `${v.toFixed(1)}%`}
+          onPointPress={k => setSelKey(prev => (prev === k ? null : k))}
+          selectedKey={selKey}
+        />
+        {selected && selQuad && (
+          <View style={[styles.anSelPanel, { borderLeftColor: QUADRANT_META[selQuad].color }]}>
+            <View style={{ flex: 1, minWidth: 180 }}>
+              <RNText style={styles.anSelTitle}>Máquina {selected.id} · {selected.location}</RNText>
+              <RNText style={styles.anSelSub} numberOfLines={1}>
+                {selected.game} · {shortMfr(selected.manufacturer)}
+              </RNText>
+              <View style={[styles.anSelQuadChip, { backgroundColor: QUADRANT_META[selQuad].color + '15', borderColor: QUADRANT_META[selQuad].color + '55' }]}>
+                <RNText style={[styles.anSelQuadText, { color: QUADRANT_META[selQuad].color }]}>
+                  {QUADRANT_META[selQuad].label}
+                </RNText>
+              </View>
+            </View>
+            <View style={styles.anSelMetrics}>
+              <View style={styles.anSelMetric}>
+                <RNText style={styles.anSelMetricVal}>{money(selected.avgCoinIn ?? 0, 0)}</RNText>
+                <RNText style={styles.anSelMetricLabel}>CI PD</RNText>
+              </View>
+              <View style={styles.anSelMetric}>
+                <RNText style={[styles.anSelMetricVal, { color: C.green }]}>{money(selected.avgWin ?? 0, 0)}</RNText>
+                <RNText style={styles.anSelMetricLabel}>Win PD</RNText>
+              </View>
+              <View style={styles.anSelMetric}>
+                <RNText style={[styles.anSelMetricVal, { color: C.navy3 }]}>
+                  {(((selected.avgWin ?? 0) / (selected.avgCoinIn ?? 1)) * 100).toFixed(1)}%
+                </RNText>
+                <RNText style={styles.anSelMetricLabel}>Win %</RNText>
+              </View>
+            </View>
+            <Pressable style={styles.anSelBtn} onPress={() => onOpenBank(bankOf(selected.location))}>
+              <RNText style={styles.anSelBtnText}>Ver banco</RNText>
+              <Ionicons name="arrow-forward" size={13} color="#fff" />
+            </Pressable>
+          </View>
+        )}
+      </AnChartCard>
+
+      {/* Concentración (Pareto) */}
+      <AnChartCard
+        title={`Concentración por banco (Pareto) · ${metricLabel}`}
+        note="Barras = aporte de cada banco, de mayor a menor; la línea dorada acumula el porcentaje del total. Los bancos resaltados sostienen el piso: protégelos antes de mover máquinas."
+      >
+        <ParetoChart items={model.paretoItems} formatValue={v => money(v, 0)} />
+      </AnChartCard>
+
+      {/* Consistencia por fabricante */}
+      <AnChartCard
+        title={`Consistencia por fabricante · ${metricLabel}`}
+        note="La caja cubre el 50% central de las máquinas del fabricante y la marca gruesa es su mediana. Cajas anchas = rendimiento desigual dentro del mismo fabricante; medianas a la derecha de la línea dorada superan a la máquina típica del piso."
+      >
+        <BoxPlotRows
+          groups={model.boxGroups}
+          formatValue={v => money(v, 0)}
+          referenceValue={stats.median}
+          referenceLabel="Mediana del piso"
+        />
+      </AnChartCard>
+
+      <RNText style={styles.footer}>
+        Casino Atlántico Manatí · Análisis estadístico de {metricLabel} por máquina, banco y fabricante
+      </RNText>
     </ScrollView>
   );
 }
@@ -1093,7 +1401,7 @@ export default function DashboardScreen() {
   const closeSearch = () => { setSearchOpen(false); setExplorerSearch(''); };
 
   const searching = searchOpen && explorerSearch.trim().length >= 2;
-  const showMetricToggle = ['resumen', 'plano', 'bancos', 'comparativa'].includes(tab);
+  const showMetricToggle = ['resumen', 'plano', 'analisis', 'bancos', 'comparativa'].includes(tab);
 
   return (
     <View style={styles.root}>
@@ -1193,6 +1501,7 @@ export default function DashboardScreen() {
             <>
               {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} onOpenBank={openBank} onOpenMfr={openMfr} />}
               {tab === 'plano'       && <PlanoSection metric={metric} gutter={gutter} onOpenBank={openBank} />}
+              {tab === 'analisis'    && <AnalisisSection metric={metric} gutter={gutter} onOpenBank={openBank} />}
               {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} focusBank={focusBank} />}
               {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
               {tab === 'fabricantes' && <FabricantesSection gutter={gutter} highlightMfr={focusMfr} />}
@@ -1638,6 +1947,58 @@ const styles = StyleSheet.create({
     marginTop: -4, marginBottom: 8,
     paddingHorizontal: 4,
   },
+
+  // ── Análisis ──────────────────────────────────────────────────────────────
+  anFindingsCard: { borderLeftWidth: 4, borderLeftColor: C.gold },
+  anFindingRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+  },
+  anFindingIcon: {
+    width: 28, height: 28, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 1,
+  },
+  anFindingText: { flex: 1, fontSize: 13, color: C.text, lineHeight: 19 },
+  anBold:        { fontWeight: '800', color: C.navy },
+  anChartNote: {
+    fontSize: 11.5, color: C.muted, lineHeight: 16, marginTop: 14,
+    backgroundColor: C.track, borderRadius: 8, padding: 10,
+  },
+  anStatGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
+  },
+  anStatTile: {
+    flexGrow: 1, flexBasis: 130, minWidth: 120,
+    backgroundColor: C.track, borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 12, gap: 2,
+  },
+  anStatValue: { fontSize: 18, fontWeight: '800', color: C.navy, letterSpacing: -0.4 },
+  anStatLabel: { fontSize: 10.5, fontWeight: '700', color: C.navy3, letterSpacing: 0.2, textTransform: 'uppercase' },
+  anStatHint:  { fontSize: 10, color: C.muted },
+  anSelPanel: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12,
+    marginTop: 12, padding: 12,
+    backgroundColor: C.track, borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  anSelTitle: { fontSize: 14, fontWeight: '800', color: C.navy },
+  anSelSub:   { fontSize: 11.5, color: C.muted, marginTop: 1 },
+  anSelQuadChip: {
+    alignSelf: 'flex-start', marginTop: 6,
+    borderRadius: 6, borderWidth: 1,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  anSelQuadText: { fontSize: 10, fontWeight: '700' },
+  anSelMetrics:  { flexDirection: 'row', gap: 16 },
+  anSelMetric:   { alignItems: 'center', gap: 1 },
+  anSelMetricVal:   { fontSize: 14, fontWeight: '800', color: C.navy },
+  anSelMetricLabel: { fontSize: 9, fontWeight: '700', color: C.muted, letterSpacing: 0.5 },
+  anSelBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.navy, borderRadius: 9,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  anSelBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   // ── Fabricantes redesign ──────────────────────────────────────────────────
   sectionIntro: {

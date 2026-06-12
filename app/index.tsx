@@ -4,7 +4,7 @@ import {
   StyleSheet, Switch, Text as RNText, TextInput, View,
   useWindowDimensions,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSlotFloorStore, useActiveMachines } from '@/store/useSlotFloorStore';
@@ -1400,13 +1400,22 @@ export default function DashboardScreen() {
     });
   };
 
+  // Tab content slides in from the side you are moving towards, so jumping
+  // between tabs reads as one continuous left/right motion.
+  const slideDir = useRef<1 | -1>(1);
+  const goToTab = (t: string) => {
+    const indexOf = (key: string) => TABS.findIndex(x => x.key === key);
+    slideDir.current = indexOf(t) >= indexOf(tab) ? 1 : -1;
+    setTab(t);
+  };
+
   // Cross-filtering: charts and the heatmap jump into the relevant tab.
-  const openBank = (bank: string) => { setFocusBank(bank); setTab('bancos'); };
-  const openMfr  = (mfr: string)  => { setFocusMfr(mfr); setTab('fabricantes'); };
+  const openBank = (bank: string) => { setFocusBank(bank); goToTab('bancos'); };
+  const openMfr  = (mfr: string)  => { setFocusMfr(mfr); goToTab('fabricantes'); };
   const handleTabChange = (t: string) => {
     if (t !== 'bancos')      setFocusBank(null);
     if (t !== 'fabricantes') setFocusMfr(null);
-    setTab(t);
+    goToTab(t);
   };
   const closeSearch = () => { setSearchOpen(false); setExplorerSearch(''); };
 
@@ -1503,7 +1512,11 @@ export default function DashboardScreen() {
       ) : (
         <Animated.View
           key={searching ? 'search' : tab}
-          entering={FadeIn.duration(240)}
+          entering={
+            searching ? FadeIn.duration(240)
+            : slideDir.current > 0 ? FadeInRight.duration(260)
+            : FadeInLeft.duration(260)
+          }
           style={{ flex: 1 }}
         >
           {searching ? (

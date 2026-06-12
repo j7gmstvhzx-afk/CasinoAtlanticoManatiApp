@@ -3,6 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Line, Polyline } from 'react-native-svg';
 import { Text } from '@/components/ui';
 import { C } from './shared';
+import { AnimatedPressable } from './AnimatedPressable';
+import { ChartTooltip } from './ChartTooltip';
 
 export type ParetoItem = {
   key: string;
@@ -22,6 +24,7 @@ type Props = {
 // total) are highlighted; the rest fade out. Answers "where is the money?".
 export function ParetoChart({ items, formatValue, threshold = 0.8, height = 170 }: Props) {
   const [width, setWidth] = useState(0);
+  const [active, setActive] = useState<string | null>(null);
 
   const model = useMemo(() => {
     const sorted = [...items].sort((a, b) => b.value - a.value);
@@ -62,19 +65,35 @@ export function ParetoChart({ items, formatValue, threshold = 0.8, height = 170 
       <View style={[styles.plot, { height }]} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
         {/* Bars */}
         <View style={styles.barsRow}>
-          {rows.map(r => (
-            <View key={r.key} style={styles.barSlot}>
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    height: `${Math.max((r.value / maxValue) * 100, 2)}%`,
-                    backgroundColor: r.inCore ? C.navy : C.faint,
-                  },
-                ]}
-              />
-            </View>
-          ))}
+          {rows.map(r => {
+            const isActive = active === r.key;
+            return (
+              <AnimatedPressable
+                key={r.key}
+                style={styles.barSlot}
+                hoverScale={1}
+                onPress={() => setActive(a => (a === r.key ? null : r.key))}
+                onHoverIn={() => setActive(r.key)}
+                onHoverOut={() => setActive(a => (a === r.key ? null : a))}
+              >
+                {isActive && (
+                  <ChartTooltip
+                    label={`Banco ${r.label} · ${Math.round(r.cum * 100)}% acum.`}
+                    value={formatValue(r.value)}
+                  />
+                )}
+                <View
+                  style={[
+                    styles.bar,
+                    {
+                      height: `${Math.max((r.value / maxValue) * 100, 2)}%`,
+                      backgroundColor: isActive ? C.gold : r.inCore ? C.navy : C.faint,
+                    },
+                  ]}
+                />
+              </AnimatedPressable>
+            );
+          })}
         </View>
 
         {/* Cumulative line + threshold reference (SVG overlay) */}
@@ -133,7 +152,6 @@ const styles = StyleSheet.create({
   plot: {
     backgroundColor: C.track,
     borderRadius: 10,
-    overflow: 'hidden',
   },
   barsRow: {
     flex: 1,
@@ -145,10 +163,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     justifyContent: 'flex-end',
-    alignItems: 'center',
   },
   bar: {
     width: '68%',
+    alignSelf: 'center',
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },

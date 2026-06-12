@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui';
 import { C } from './shared';
+import { AnimatedPressable } from './AnimatedPressable';
+import { ChartTooltip } from './ChartTooltip';
 
 type Props = {
   values: number[];
@@ -15,7 +17,9 @@ type Props = {
 };
 
 // Distribution histogram built with plain Views (no SVG needed): a row of
-// bottom-aligned bars plus absolutely-positioned mean/median markers.
+// bottom-aligned bars plus absolutely-positioned mean/median markers. Each
+// bar is touchable/hoverable — it highlights and surfaces a tooltip with
+// its range and machine count.
 export function Histogram({
   values,
   bins = 12,
@@ -25,6 +29,8 @@ export function Histogram({
   meanValue,
   medianValue,
 }: Props) {
+  const [active, setActive] = useState<number | null>(null);
+
   const model = useMemo(() => {
     if (values.length === 0) return null;
     const min = Math.min(...values);
@@ -37,11 +43,12 @@ export function Histogram({
     }
     const maxCount = Math.max(...counts) || 1;
     const posOf = (v: number) => Math.min(Math.max((v - min) / range, 0), 1);
-    return { min, max, counts, maxCount, posOf };
+    return { min, max, range, counts, maxCount, posOf };
   }, [values, bins]);
 
   if (!model) return <Text style={styles.empty}>Sin datos para graficar</Text>;
-  const { min, max, counts, maxCount, posOf } = model;
+  const { min, max, range, counts, maxCount, posOf } = model;
+  const binWidth = range / bins;
 
   return (
     <View style={{ gap: 6 }}>
@@ -64,16 +71,38 @@ export function Histogram({
 
       {/* Bars + markers */}
       <View style={[styles.plot, { height }]}>
-        {counts.map((count, i) => (
-          <View key={i} style={styles.barSlot}>
-            <View
-              style={[
-                styles.bar,
-                { height: `${Math.max((count / maxCount) * 100, count > 0 ? 3 : 0)}%`, backgroundColor: color },
-              ]}
-            />
-          </View>
-        ))}
+        {counts.map((count, i) => {
+          const isActive = active === i;
+          const binMin = min + i * binWidth;
+          const binMax = min + (i + 1) * binWidth;
+          return (
+            <AnimatedPressable
+              key={i}
+              style={styles.barSlot}
+              hoverScale={1}
+              onPress={() => setActive(a => (a === i ? null : i))}
+              onHoverIn={() => setActive(i)}
+              onHoverOut={() => setActive(a => (a === i ? null : a))}
+            >
+              {isActive && (
+                <ChartTooltip
+                  label={`${formatValue(binMin)} – ${formatValue(binMax)}`}
+                  value={`${count} máq.`}
+                />
+              )}
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    height: `${Math.max((count / maxCount) * 100, count > 0 ? 3 : 0)}%`,
+                    backgroundColor: isActive ? C.gold : color,
+                    opacity: isActive ? 1 : 0.85,
+                  },
+                ]}
+              />
+            </AnimatedPressable>
+          );
+        })}
         {meanValue != null && (
           <View style={[styles.marker, { left: `${posOf(meanValue) * 100}%`, backgroundColor: C.gold }]} />
         )}
@@ -101,7 +130,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingTop: 10,
-    overflow: 'hidden',
   },
   barSlot: {
     flex: 1,
@@ -112,7 +140,6 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
-    opacity: 0.85,
   },
   marker: {
     position: 'absolute',

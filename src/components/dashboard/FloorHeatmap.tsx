@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { FLOOR_LAYOUT, FLOOR_COLUMNS } from '@/data/floorLayout';
 import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
 import type { BankGroup } from '@/store/useSlotFloorStore';
@@ -119,12 +121,14 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
         <Pressable
           style={[styles.modeBtn, mode === 'perf' && styles.modeBtnActive]}
           onPress={() => setMode('perf')}
+          hoverScale={1.03}
         >
           <Text style={[styles.modeBtnText, mode === 'perf' && styles.modeBtnTextActive]}>Rendimiento actual</Text>
         </Pressable>
         <Pressable
           style={[styles.modeBtn, mode === 'delta' && styles.modeBtnActive]}
           onPress={() => setMode('delta')}
+          hoverScale={1.03}
         >
           <Text style={[styles.modeBtnText, mode === 'delta' && styles.modeBtnTextActive]}>Δ vs 2025</Text>
         </Pressable>
@@ -166,6 +170,7 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
                     ]}
                     disabled={!group}
                     onPress={() => group && setSelected(isSel ? null : group.bank)}
+                    hoverScale={group ? 1.05 : 1}
                   >
                     <Text style={[styles.cellBank, noData && styles.cellBankNoData]}>
                       {String(cell.bank).padStart(2, '0')}
@@ -213,7 +218,7 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
 
       {/* Detail panel for the selected bank */}
       {selectedGroup && (
-        <View style={styles.panel}>
+        <Animated.View entering={FadeIn.duration(180)} style={styles.panel}>
           <View style={styles.panelHeader}>
             <View>
               <Text style={styles.panelTitle}>Banco {selectedGroup.bank.padStart(2, '0')}</Text>
@@ -221,7 +226,7 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
                 {selectedGroup.machines.length} máquinas · Juego principal: {selectedGroup.topGame || '—'}
               </Text>
             </View>
-            <Pressable style={styles.panelBtn} onPress={() => onOpenBank(selectedGroup.bank)}>
+            <Pressable style={styles.panelBtn} onPress={() => onOpenBank(selectedGroup.bank)} hoverScale={1.04}>
               <Text style={styles.panelBtnText}>Ver banco</Text>
               <Ionicons name="arrow-forward" size={13} color="#fff" />
             </Pressable>
@@ -250,7 +255,7 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
               <Text style={styles.panelMetricLabel}>vs 2025 ({metric === 'avgWin' ? 'Win' : 'CI'})</Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {!selectedGroup && (

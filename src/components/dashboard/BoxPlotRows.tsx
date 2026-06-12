@@ -1,8 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
 import { C } from './shared';
 import { quantileSorted } from '@/lib/stats';
+import { AnimatedPressable } from './AnimatedPressable';
 
 export type BoxPlotGroup = {
   key: string;
@@ -23,6 +25,8 @@ type Props = {
 // spread (min–max whiskers), the middle 50% (Q1–Q3 box) and the median tick —
 // averages hide dispersion; this makes it visible per group.
 export function BoxPlotRows({ groups, formatValue, referenceValue, referenceLabel }: Props) {
+  const [active, setActive] = useState<string | null>(null);
+
   const model = useMemo(() => {
     const stats = groups
       .filter(g => g.values.length > 0)
@@ -62,38 +66,56 @@ export function BoxPlotRows({ groups, formatValue, referenceValue, referenceLabe
         </View>
       )}
 
-      {stats.map(s => (
-        <View key={s.key} style={styles.row}>
-          <View style={styles.labelCol}>
-            <Text style={styles.label} numberOfLines={1}>{s.label}</Text>
-            <Text style={styles.sub}>{s.n} máq · med {formatValue(s.median)}</Text>
-          </View>
-          <View style={styles.plot}>
-            {/* Whisker (min–max) */}
-            <View style={[styles.whisker, { left: `${pos(s.min)}%`, width: `${Math.max(pos(s.max) - pos(s.min), 0.5)}%` }]} />
-            <View style={[styles.whiskerCap, { left: `${pos(s.min)}%` }]} />
-            <View style={[styles.whiskerCap, { left: `${pos(s.max)}%` }]} />
-            {/* Box (Q1–Q3) */}
-            <View
-              style={[
-                styles.box,
-                {
-                  left: `${pos(s.q1)}%`,
-                  width: `${Math.max(pos(s.q3) - pos(s.q1), 1)}%`,
-                  backgroundColor: s.color + '33',
-                  borderColor: s.color,
-                },
-              ]}
-            />
-            {/* Median tick */}
-            <View style={[styles.median, { left: `${pos(s.median)}%`, backgroundColor: s.color }]} />
-            {/* Reference line */}
-            {referenceValue != null && (
-              <View style={[styles.refLine, { left: `${pos(referenceValue)}%` }]} />
+      {stats.map(s => {
+        const isActive = active === s.key;
+        return (
+          <View key={s.key}>
+            <AnimatedPressable
+              style={[styles.row, isActive && styles.rowActive]}
+              hoverScale={1}
+              onPress={() => setActive(a => (a === s.key ? null : s.key))}
+              onHoverIn={() => setActive(s.key)}
+              onHoverOut={() => setActive(a => (a === s.key ? null : a))}
+            >
+              <View style={styles.labelCol}>
+                <Text style={styles.label} numberOfLines={1}>{s.label}</Text>
+                <Text style={styles.sub}>{s.n} máq · med {formatValue(s.median)}</Text>
+              </View>
+              <View style={styles.plot}>
+                {/* Whisker (min–max) */}
+                <View style={[styles.whisker, { left: `${pos(s.min)}%`, width: `${Math.max(pos(s.max) - pos(s.min), 0.5)}%` }]} />
+                <View style={[styles.whiskerCap, { left: `${pos(s.min)}%` }]} />
+                <View style={[styles.whiskerCap, { left: `${pos(s.max)}%` }]} />
+                {/* Box (Q1–Q3) */}
+                <View
+                  style={[
+                    styles.box,
+                    {
+                      left: `${pos(s.q1)}%`,
+                      width: `${Math.max(pos(s.q3) - pos(s.q1), 1)}%`,
+                      backgroundColor: s.color + '33',
+                      borderColor: s.color,
+                    },
+                  ]}
+                />
+                {/* Median tick */}
+                <View style={[styles.median, { left: `${pos(s.median)}%`, backgroundColor: s.color }]} />
+                {/* Reference line */}
+                {referenceValue != null && (
+                  <View style={[styles.refLine, { left: `${pos(referenceValue)}%` }]} />
+                )}
+              </View>
+            </AnimatedPressable>
+            {isActive && (
+              <Animated.View entering={FadeIn.duration(140)} style={styles.detailRow}>
+                <Text style={styles.detailText}>
+                  Mín {formatValue(s.min)} · Q1 {formatValue(s.q1)} · Mediana {formatValue(s.median)} · Q3 {formatValue(s.q3)} · Máx {formatValue(s.max)}
+                </Text>
+              </Animated.View>
             )}
           </View>
-        </View>
-      ))}
+        );
+      })}
 
       <View style={styles.axis}>
         <View style={styles.labelCol} />
@@ -115,6 +137,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingVertical: 7,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+  },
+  rowActive: {
+    backgroundColor: C.track,
+  },
+  detailRow: {
+    paddingHorizontal: 6,
+    paddingBottom: 6,
+    marginTop: -2,
+  },
+  detailText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.text,
   },
   labelCol: { width: LABEL_W },
   label:    { fontSize: 12, fontWeight: '700', color: C.navy },

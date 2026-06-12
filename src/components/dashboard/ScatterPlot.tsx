@@ -57,6 +57,7 @@ export function ScatterPlot({
   selectedKey,
 }: Props) {
   const [width, setWidth] = useState(0);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
 
   const model = useMemo(() => {
     if (points.length === 0) return null;
@@ -108,16 +109,19 @@ export function ScatterPlot({
             {points.map(p => {
               const q = quadrantOf(p, xMid, yMid);
               const selected = selectedKey === p.key;
+              const pressed = pressedKey === p.key;
               return (
                 <Circle
                   key={p.key}
                   cx={px(p.x)}
                   cy={py(p.y)}
-                  r={selected ? 7 : 4.5}
+                  r={selected ? 7 : pressed ? 6.5 : 4.5}
                   fill={QUADRANT_META[q].color}
-                  opacity={selected ? 1 : 0.65}
+                  opacity={selected || pressed ? 1 : 0.65}
                   stroke={selected ? C.navy : '#ffffff'}
-                  strokeWidth={selected ? 2 : 0.8}
+                  strokeWidth={selected ? 2 : pressed ? 1.5 : 0.8}
+                  onPressIn={() => setPressedKey(p.key)}
+                  onPressOut={() => setPressedKey(k => (k === p.key ? null : k))}
                   onPress={onPointPress ? () => onPointPress(p.key) : undefined}
                 />
               );

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
+import { AnimatedChevron } from './AnimatedChevron';
 import { MachineRow } from './MachineRow';
 import type { BankGroup } from '@/store/useSlotFloorStore';
 import type { SlotMachine } from '@/types/domain';
@@ -57,7 +58,12 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
       style={[styles.card, ri && rank <= 3 && styles.cardTop, focused && styles.cardFocused]}
       onLayout={onLayoutY ? e => onLayoutY(e.nativeEvent.layout.y) : undefined}
     >
-      <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)} android_ripple={{ color: '#f0f0f0' }}>
+      <Pressable
+        style={styles.cardHeader}
+        onPress={() => setExpanded(e => !e)}
+        android_ripple={{ color: '#f0f0f0' }}
+        scaleTo={0.995}
+      >
         {/* Left: bank number badge */}
         <View style={[styles.bankBadge, rank <= 3 && styles.bankBadgeTop]}>
           <Text style={[styles.bankNum, rank <= 3 && styles.bankNumTop]}>Banco</Text>
@@ -86,7 +92,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
           )}
           <Text style={styles.avgLabel}>Total CI: {money(group.totalCoinIn, 0)} · Win: {money(group.totalWin, 0)}</Text>
           <Text style={[styles.avgLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
+          <AnimatedChevron expanded={expanded} size={16} color={C.muted} />
         </View>
       </Pressable>
 

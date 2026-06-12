@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
 import { C } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
 
 export type HBarItem = {
   key: string;
@@ -58,6 +59,7 @@ export function HBars({ data, barColor = C.navy, onPress }: Props) {
             key={item.key}
             style={({ pressed }) => [styles.row, styles.rowPressable, pressed && { opacity: 0.6 }]}
             onPress={() => onPress(item.key)}
+            hoverScale={1.01}
           >
             {row}
           </Pressable>

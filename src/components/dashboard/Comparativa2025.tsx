@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money, mfrColor, shortMfr, bankOf } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
+import { AnimatedChevron } from './AnimatedChevron';
 import { DeltaBar } from './DeltaBar';
 import { SLOT_FLOOR_2025, type SlotEntry2025 } from '@/data/slotFloor2025';
 import type { SlotMachine } from '@/types/domain';
@@ -174,7 +176,12 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
 
   return (
     <View style={styles.card}>
-      <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)} android_ripple={{ color: '#f0f0f0' }}>
+      <Pressable
+        style={styles.cardHeader}
+        onPress={() => setExpanded(e => !e)}
+        android_ripple={{ color: '#f0f0f0' }}
+        scaleTo={0.995}
+      >
         <View style={styles.bankBadge}>
           <Text style={styles.bankNum}>Banco</Text>
           <Text style={styles.bankNumLg}>{bank}</Text>
@@ -196,7 +203,7 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
           </View>
         )}
 
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
+        <AnimatedChevron expanded={expanded} size={16} color={C.muted} />
       </Pressable>
 
       {expanded && (
@@ -326,6 +333,7 @@ export function Comparativa2025({ machines, metric }: Props) {
               key={f.id}
               style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
               onPress={() => setFilter(f.id)}
+              hoverScale={1.04}
             >
               <Text style={[styles.filterPillText, filter === f.id && styles.filterPillTextActive]}>{f.label}</Text>
             </Pressable>
@@ -334,6 +342,7 @@ export function Comparativa2025({ machines, metric }: Props) {
         <Pressable
           style={[styles.sortBtn, sortWorst && styles.sortBtnActive]}
           onPress={() => setSortWorst(s => !s)}
+          hoverScale={1.04}
         >
           <Ionicons name="swap-vertical" size={13} color={sortWorst ? '#fff' : C.navy3} />
           <Text style={[styles.sortBtnText, sortWorst && { color: '#fff' }]}>

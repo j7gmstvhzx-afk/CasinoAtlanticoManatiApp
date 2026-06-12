@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Pressable, ScrollView,
+  ScrollView,
   StyleSheet, Switch, Text as RNText, TextInput, View,
   useWindowDimensions,
 } from 'react-native';
@@ -15,6 +15,8 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { HBars, type HBarItem } from '@/components/dashboard/HBars';
 import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
+import { AnimatedPressable as Pressable } from '@/components/dashboard/AnimatedPressable';
+import { AnimatedChevron } from '@/components/dashboard/AnimatedChevron';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
 import { FloorHeatmap } from '@/components/dashboard/FloorHeatmap';
@@ -510,7 +512,7 @@ function AnalisisSection({ metric, gutter, onOpenBank }: {
                 <RNText style={styles.anSelMetricLabel}>Win %</RNText>
               </View>
             </View>
-            <Pressable style={styles.anSelBtn} onPress={() => onOpenBank(bankOf(selected.location))}>
+            <Pressable style={styles.anSelBtn} onPress={() => onOpenBank(bankOf(selected.location))} hoverScale={1.04}>
               <RNText style={styles.anSelBtnText}>Ver banco</RNText>
               <Ionicons name="arrow-forward" size={13} color="#fff" />
             </Pressable>
@@ -607,6 +609,7 @@ function BancosSection({ metric, onEdit, gutter, focusBank }: {
           <Pressable
             style={[styles.filterChip, !filterId && styles.filterChipActive]}
             onPress={() => setFilterId(null)}
+            hoverScale={1.04}
           >
             <RNText style={[styles.filterChipText, !filterId && styles.filterChipTextActive]}>Todos los bancos</RNText>
           </Pressable>
@@ -618,6 +621,7 @@ function BancosSection({ metric, onEdit, gutter, focusBank }: {
                 filterId === f.id && (f.type === 'win' ? styles.filterChipWinActive : styles.filterChipCIActive),
               ]}
               onPress={() => setFilterId(filterId === f.id ? null : f.id)}
+              hoverScale={1.04}
             >
               <RNText style={[styles.filterChipText, filterId === f.id && styles.filterChipTextActive]}>{f.label}</RNText>
             </Pressable>
@@ -760,6 +764,7 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
                 key={opt.id}
                 style={[styles.mfrSortPill, active && styles.mfrSortPillActive]}
                 onPress={() => setSortKey(opt.id)}
+                hoverScale={1.04}
               >
                 <RNText style={[styles.mfrSortPillText, active && styles.mfrSortPillTextActive]}>
                   {opt.label}
@@ -953,6 +958,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
         <Pressable
           style={[styles.betSwitchBtn, betView === 'min' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('min')}
+          hoverScale={1.02}
         >
           <RNText style={[styles.betSwitchLabel, betView === 'min' && styles.betSwitchLabelActive]}>MIN BET</RNText>
           <RNText style={[styles.betSwitchSub, betView === 'min' && { color: '#fff' }]}>Apuesta Mínima</RNText>
@@ -960,6 +966,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
         <Pressable
           style={[styles.betSwitchBtn, betView === 'max' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('max')}
+          hoverScale={1.02}
         >
           <RNText style={[styles.betSwitchLabel, betView === 'max' && styles.betSwitchLabelActive]}>MAX BET</RNText>
           <RNText style={[styles.betSwitchSub, betView === 'max' && { color: '#fff' }]}>Apuesta Máxima</RNText>
@@ -998,6 +1005,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
           <Pressable
             style={[styles.betSegPress, { borderLeftColor: '#2d6a6a' }]}
             onPress={() => setExpandedDeno(expandedDeno === 'acc' ? null : 'acc')}
+            hoverScale={1.01}
           >
             <View style={styles.betSegPressHeader}>
               <View>
@@ -1007,7 +1015,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
               <View style={styles.betSegPressRight}>
                 <RNText style={[styles.betSegCount, { color: '#2d6a6a' }]}>{minStats.accCount}</RNText>
                 <RNText style={styles.betSegCountLabel}>máquinas</RNText>
-                <Ionicons name={expandedDeno === 'acc' ? 'chevron-up' : 'chevron-down'} size={16} color="#2d6a6a" />
+                <AnimatedChevron expanded={expandedDeno === 'acc'} size={16} color="#2d6a6a" />
               </View>
             </View>
             <View style={styles.betSegStats}>
@@ -1032,6 +1040,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
           <Pressable
             style={[styles.betSegPress, { borderLeftColor: C.gold }]}
             onPress={() => setExpandedDeno(expandedDeno === 'high' ? null : 'high')}
+            hoverScale={1.01}
           >
             <View style={styles.betSegPressHeader}>
               <View>
@@ -1041,7 +1050,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
               <View style={styles.betSegPressRight}>
                 <RNText style={[styles.betSegCount, { color: C.gold }]}>{minStats.highCount}</RNText>
                 <RNText style={styles.betSegCountLabel}>máquinas</RNText>
-                <Ionicons name={expandedDeno === 'high' ? 'chevron-up' : 'chevron-down'} size={16} color={C.gold} />
+                <AnimatedChevron expanded={expandedDeno === 'high'} size={16} color={C.gold} />
               </View>
             </View>
             <View style={styles.betSegStats}>
@@ -1103,16 +1112,16 @@ function ApuestasSection({ gutter }: { gutter: number }) {
                 style={[styles.denoTile, { borderColor: (DENO_COLORS[deno] ?? C.navy3) + '55' },
                   expandedDeno === deno && { borderColor: DENO_COLORS[deno] ?? C.navy3, borderWidth: 2 }]}
                 onPress={() => setExpandedDeno(expandedDeno === deno ? null : deno)}
+                hoverScale={1.03}
               >
                 <View style={[styles.denoTileBadge, { backgroundColor: DENO_COLORS[deno] ?? C.navy3 }]}>
                   <RNText style={styles.denoTileBadgeText}>{DENO_LABELS[deno] ?? deno}</RNText>
                 </View>
                 <RNText style={styles.denoTileCount}>{mList.length}</RNText>
                 <RNText style={styles.denoTileSub}>máquinas</RNText>
-                <Ionicons
-                  name={expandedDeno === deno ? 'chevron-up' : 'chevron-down'}
-                  size={13} color={C.muted} style={{ marginTop: 4 }}
-                />
+                <View style={{ marginTop: 4 }}>
+                  <AnimatedChevron expanded={expandedDeno === deno} size={13} color={C.muted} />
+                </View>
               </Pressable>
             ))}
           </View>
@@ -1205,6 +1214,7 @@ function CambiosSection({ gutter }: { gutter: number }) {
                   active && { backgroundColor: color + '14', borderColor: color + '66', borderWidth: 1, borderLeftWidth: 4 },
                 ]}
                 onPress={() => setTypeFilter(active ? null : type)}
+                hoverScale={1.02}
               >
                 <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
                   <Ionicons name={icon} size={22} color={color} />
@@ -1428,6 +1438,7 @@ export default function DashboardScreen() {
               hitSlop={8}
               accessibilityLabel={searchOpen ? 'Cerrar búsqueda' : 'Buscar máquinas'}
               style={[styles.searchBtn, searchOpen && styles.searchBtnActive]}
+              hoverScale={1.08}
             >
               <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={searchOpen ? '#fff' : C.navy3} />
             </Pressable>
@@ -1444,7 +1455,7 @@ export default function DashboardScreen() {
                 <RNText style={[styles.metricLabel, metric === 'avgWin' && styles.metricLabelActive]}>Win</RNText>
               </View>
             )}
-            <Pressable onPress={handleGenerateReport} style={styles.reportBtn}>
+            <Pressable onPress={handleGenerateReport} style={styles.reportBtn} hoverScale={1.04}>
               <Ionicons name="document-text-outline" size={15} color="#fff" />
               {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
             </Pressable>
@@ -1455,7 +1466,7 @@ export default function DashboardScreen() {
                 </RNText>
               </View>
             )}
-            <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn}>
+            <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn} hoverScale={1.1}>
               <Ionicons name="log-out-outline" size={22} color={C.navy3} />
             </Pressable>
           </View>
@@ -1476,7 +1487,7 @@ export default function DashboardScreen() {
               autoCorrect={false}
             />
             {explorerSearch.length > 0 && (
-              <Pressable onPress={() => setExplorerSearch('')} hitSlop={8}>
+              <Pressable onPress={() => setExplorerSearch('')} hitSlop={8} hoverScale={1.15}>
                 <Ionicons name="close-circle" size={18} color={C.muted} />
               </Pressable>
             )}

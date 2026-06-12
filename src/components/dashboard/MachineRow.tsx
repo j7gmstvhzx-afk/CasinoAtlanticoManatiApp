@@ -1,8 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money, shortMfr, mfrColor } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import type { SlotMachine } from '@/types/domain';
 
 type Props = {
@@ -62,7 +63,7 @@ export function MachineRow({ machine: m, onEdit }: Props) {
 
       {/* Edit button */}
       {onEdit && (
-        <Pressable style={styles.editBtn} onPress={() => onEdit(m)} hitSlop={8}>
+        <Pressable style={styles.editBtn} onPress={() => onEdit(m)} hitSlop={8} hoverScale={1.12} scaleTo={0.9}>
           <Ionicons name="pencil" size={13} color={C.navy3} />
         </Pressable>
       )}

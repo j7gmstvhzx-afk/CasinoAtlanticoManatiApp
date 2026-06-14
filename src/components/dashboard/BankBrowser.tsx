@@ -84,7 +84,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
         </View>
 
         {/* Right: rank chip + bank totals + WWCJPR + chevron */}
-        <View style={styles.rightCol}>
+        <View style={[styles.rightCol, !isWide && styles.rightColNarrow]}>
           {ri && (
             <View style={[styles.rankChip, { borderColor: ri.border }]}>
               <Text style={[styles.rankText, { color: ri.color }]}>{ri.label}</Text>
@@ -167,6 +167,8 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
     paddingVertical: 16,
     paddingHorizontal: 16,
     gap: 14,
@@ -236,6 +238,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 5,
     minWidth: 72,
+  },
+  rightColNarrow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
   },
   rankChip: {
     borderRadius: 8,

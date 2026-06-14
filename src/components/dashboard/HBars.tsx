@@ -75,6 +75,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
     gap: 12,
   },
   rowPressable: {

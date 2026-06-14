@@ -20,6 +20,21 @@ function MetricCol({ label, value, color }: { label: string; value: string; colo
   );
 }
 
+// Shows the editable bet range as one unit so changes to either bound are
+// immediately visible in the same spot.
+function BetRangeCol({ minBet, maxBet }: { minBet: number; maxBet: number | null }) {
+  return (
+    <View style={styles.metricCol}>
+      <Text style={styles.metricLabel}>MIN / MAX BET</Text>
+      <View style={styles.betRangeRow}>
+        <Text style={[styles.metricValue, styles.betRangeValue, { color: C.navy3 }]}>{money(minBet, 2)}</Text>
+        <Text style={styles.betRangeSep}>–</Text>
+        <Text style={[styles.metricValue, styles.betRangeValue, { color: C.navy }]}>{maxBet != null ? money(maxBet, 2) : '—'}</Text>
+      </View>
+    </View>
+  );
+}
+
 export function MachineRow({ machine: m, onEdit }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
   const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
@@ -56,9 +71,7 @@ export function MachineRow({ machine: m, onEdit }: Props) {
           ? <MetricCol label="WWCJPR" value={money(wwcjpr, 0)} color="#b8863f" />
           : <View style={styles.metricEmpty} />}
         <View style={styles.divider} />
-        {maxBet != null
-          ? <MetricCol label="MAX BET" value={money(maxBet, 2)} color={C.navy} />
-          : <View style={styles.metricEmpty} />}
+        <BetRangeCol minBet={m.minBet} maxBet={maxBet} />
       </View>
 
       {/* Edit button */}
@@ -172,6 +185,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: -0.3,
+  },
+  betRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  betRangeValue: {
+    fontSize: 11,
+  },
+  betRangeSep: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.faint,
   },
 
   editBtn: {

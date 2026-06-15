@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { showErrorAlert } from '@/lib/alert';
 import type {
   SlotMachine, CoinInEntry, FloorStats, ExplorerFilters, MachineChange,
   SlotManufacturer, SlotMachineType,
@@ -264,9 +265,7 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
       // RLS or network rejected the write — roll back so the UI matches the DB
       const rolledBack = get().machines.map(m => m.id === id ? prev : m);
       set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
-      if (typeof window !== 'undefined') {
-        window.alert(`No se pudo guardar la máquina ${id}: ${error.message}`);
-      }
+      showErrorAlert(`No se pudo guardar la máquina ${id}: ${error.message}`);
       return;
     }
 
@@ -351,9 +350,7 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     if (error) {
       const rolledBack = get().machines.map(m => prevById.get(m.id) ?? m);
       set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
-      if (typeof window !== 'undefined') {
-        window.alert(`No se pudieron guardar los cambios: ${error.message}`);
-      }
+      showErrorAlert(`No se pudieron guardar los cambios: ${error.message}`);
     }
   },
 

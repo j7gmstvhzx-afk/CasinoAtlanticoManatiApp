@@ -7,7 +7,7 @@ import { C, money, mfrColor, shortMfr, bankOf } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { AnimatedChevron } from './AnimatedChevron';
 import { DeltaBar } from './DeltaBar';
-import { SLOT_FLOOR_2025, type SlotEntry2025 } from '@/data/slotFloor2025';
+import { SLOT_FLOOR_2025, SLOT_FLOOR_2025_BY_MACHINE, type SlotEntry2025 } from '@/data/slotFloor2025';
 import type { SlotMachine } from '@/types/domain';
 
 type Metric = 'avgCoinIn' | 'avgWin';
@@ -17,7 +17,9 @@ type Props = {
   metric: Metric;
 };
 
-type Row = { machine: SlotMachine; ref: SlotEntry2025 | null };
+// `relocatedFrom2025` is the position this machine occupied in the 2025 snapshot,
+// when it differs from its current position (i.e. it was moved since then).
+type Row = { machine: SlotMachine; ref: SlotEntry2025 | null; relocatedFrom2025: string | null };
 
 // A row is comparable only when the position has 2025 data AND the current
 // machine already has data entered — otherwise a new machine at an old
@@ -68,7 +70,12 @@ function buildComparisons(machines: SlotMachine[]): BankCompare[] {
   const byBank = new Map<string, Row[]>();
   for (const m of machines) {
     const bank = bankOf(m.location);
-    const row: Row = { machine: m, ref: SLOT_FLOOR_2025[m.location] ?? null };
+    // Prefer the per-machine 2025 baseline (survives relocations); fall back
+    // to the position-based snapshot when this machine has no 2025 record.
+    const byMachine = SLOT_FLOOR_2025_BY_MACHINE[m.id];
+    const ref = byMachine ?? SLOT_FLOOR_2025[m.location] ?? null;
+    const relocatedFrom2025 = byMachine && byMachine.location2025 !== m.location ? byMachine.location2025 : null;
+    const row: Row = { machine: m, ref, relocatedFrom2025 };
     if (!byBank.has(bank)) byBank.set(bank, []);
     byBank.get(bank)!.push(row);
   }
@@ -124,6 +131,9 @@ function CompareRow({ row }: { row: Row }) {
       <View style={styles.idCol}>
         <Text style={styles.machineId}>{m.id}</Text>
         <Text style={styles.location}>{m.location}</Text>
+        {row.relocatedFrom2025 && (
+          <Text style={styles.relocatedTag}>2025: {row.relocatedFrom2025}</Text>
+        )}
       </View>
 
       <View style={styles.gameCol}>
@@ -287,8 +297,8 @@ export function Comparativa2025({ machines, metric }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.introTitle}>Comparativa de rendimiento vs. 2025</Text>
           <Text style={styles.introSub}>
-            Cada posición del piso (ej. 09-01) comparada contra su misma posición en el snapshot 2025 ·
-            {' '}{totals.matched} de {totals.total} máquinas comparables
+            Cada máquina comparada contra su propio rendimiento en el snapshot 2025 — si fue reubicada,
+            se muestra su posición anterior · {totals.matched} de {totals.total} máquinas comparables
           </Text>
         </View>
       </View>
@@ -518,9 +528,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   accentBar: { width: 3, alignSelf: 'stretch' },
-  idCol: { width: 50, paddingVertical: 7, paddingLeft: 8, gap: 2 },
+  idCol: { width: 62, paddingVertical: 7, paddingLeft: 8, gap: 2 },
   machineId: { fontSize: 13, fontWeight: '800', color: C.navy, letterSpacing: -0.3 },
   location:  { fontSize: 9, fontWeight: '700', color: C.gold, letterSpacing: 0.3 },
+  relocatedTag: { fontSize: 8, fontWeight: '600', color: C.muted, fontStyle: 'italic' },
   gameCol: { flex: 1, paddingVertical: 7, paddingHorizontal: 8, gap: 4, minWidth: 110 },
   game: { fontSize: 12, fontWeight: '600', color: C.text, lineHeight: 15 },
   mfrPill: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1 },

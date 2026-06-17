@@ -95,9 +95,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: C.navy,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: C.gold,
   },
   tab: {
     paddingHorizontal: 16,

@@ -1,8 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, TONES, type Tone } from './shared';
+import { typography } from '@/theme';
+import { C, TONES, TONE_GRADIENTS, type Tone } from './shared';
 
 type Props = {
   label: string;
@@ -14,13 +16,15 @@ type Props = {
 
 export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
   const t = TONES[tone];
+  const gradient = TONE_GRADIENTS[tone];
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { shadowColor: t.fg }]}>
+      <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topAccent} />
       <View style={styles.header}>
         {icon ? (
-          <View style={[styles.iconBadge, { backgroundColor: t.bg }]}>
-            <Ionicons name={icon} size={18} color={t.fg} />
-          </View>
+          <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.iconBadge}>
+            <Ionicons name={icon} size={18} color="#fff" />
+          </LinearGradient>
         ) : null}
         <Text style={styles.label} numberOfLines={2}>{label}</Text>
       </View>
@@ -50,12 +54,19 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: C.border,
-    shadowColor: '#1a2332',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
     elevation: 2,
     gap: 12,
+    overflow: 'hidden',
+  },
+  topAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   header: {
     flexDirection: 'row',
@@ -80,6 +91,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   value: {
+    fontFamily: typography.display.fontFamily,
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.8,

@@ -102,6 +102,15 @@ export const TONES: Record<Tone, { fg: string; bg: string; soft: string }> = {
   red:   { fg: '#c65555', bg: '#fce8e8', soft: '#fdf2f2' },
 };
 
+// Two-stop gradients per tone, used for icon badges and accent bars.
+export const TONE_GRADIENTS: Record<Tone, readonly [string, string]> = {
+  navy:  ['#4a5f7f', '#1a2332'],
+  gold:  ['#e6c9a8', '#b8935f'],
+  green: ['#34d399', '#15803d'],
+  teal:  ['#5eead4', '#0f766e'],
+  red:   ['#f87171', '#b91c1c'],
+};
+
 // ── Shared card styles ───────────────────────────────────────────────────────
 export const card = StyleSheet.create({
   base: {

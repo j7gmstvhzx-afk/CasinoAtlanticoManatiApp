@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
 import { C } from './shared';
@@ -11,6 +12,8 @@ export type HBarItem = {
   value: number;
   display: string;
   color?: string;
+  /** Optional second stop — renders the fill as a gradient instead of flat color. */
+  colorTo?: string;
 };
 
 type Props = {
@@ -20,7 +23,7 @@ type Props = {
 };
 
 // Bar fill animates from 0 on mount, staggered top→bottom.
-function AnimatedFill({ pct, color, delay }: { pct: number; color: string; delay: number }) {
+function AnimatedFill({ pct, color, colorTo, delay }: { pct: number; color: string; colorTo?: string; delay: number }) {
   const width = useSharedValue(0);
 
   useEffect(() => {
@@ -29,7 +32,16 @@ function AnimatedFill({ pct, color, delay }: { pct: number; color: string; delay
 
   const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
 
-  return <Animated.View style={[styles.fill, { backgroundColor: color }, animated]} />;
+  return (
+    <Animated.View style={[styles.fillWrap, animated]}>
+      <LinearGradient
+        colors={[color, colorTo ?? color]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.fill}
+      />
+    </Animated.View>
+  );
 }
 
 export function HBars({ data, barColor = C.navy, onPress }: Props) {
@@ -48,7 +60,7 @@ export function HBars({ data, barColor = C.navy, onPress }: Props) {
             <Text style={[styles.label, { width: labelW }]} numberOfLines={1}>{item.label}</Text>
             <View style={styles.trackWrap}>
               <View style={styles.track}>
-                <AnimatedFill pct={pct} color={fill} delay={i * 40} />
+                <AnimatedFill pct={pct} color={fill} colorTo={item.colorTo} delay={i * 40} />
               </View>
             </View>
             <Text style={[styles.value, { width: valueW }]} numberOfLines={1}>{item.display}</Text>
@@ -95,10 +107,15 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     overflow: 'hidden',
   },
-  fill: {
+  fillWrap: {
     height: '100%',
     borderRadius: 7,
+    overflow: 'hidden',
     minWidth: 6,
+  },
+  fill: {
+    flex: 1,
+    borderRadius: 7,
   },
   value: {
     fontSize: 13,

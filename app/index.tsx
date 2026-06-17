@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSlotFloorStore, useActiveMachines } from '@/store/useSlotFloorStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -25,7 +26,8 @@ import { Histogram } from '@/components/dashboard/Histogram';
 import { ScatterPlot, quadrantOf, QUADRANT_META, type ScatterPoint } from '@/components/dashboard/ScatterPlot';
 import { ParetoChart } from '@/components/dashboard/ParetoChart';
 import { BoxPlotRows, type BoxPlotGroup } from '@/components/dashboard/BoxPlotRows';
-import { C, CHIP_BLUE, card, money, mfrColor, shortMfr, bankOf } from '@/components/dashboard/shared';
+import { C, card, money, mfrColor, shortMfr, bankOf } from '@/components/dashboard/shared';
+import { typography } from '@/theme';
 import { describe } from '@/lib/stats';
 import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
@@ -103,38 +105,38 @@ function FloorHealthCard({ metric }: { metric: Metric }) {
   const health = useMemo(() => computeFloorHealth(machines, metric), [machines, metric]);
   if (!health) return null;
 
-  const tone = health.score >= 90 ? C.green : health.score >= 70 ? '#b45309' : C.red;
-  const toneBg = health.score >= 90 ? C.greenBg : health.score >= 70 ? '#fdf6ec' : C.redBg;
+  const tone = health.score >= 90 ? '#34d399' : health.score >= 70 ? '#fbbf24' : '#f87171';
+  const ringColors = (health.score >= 90 ? ['#34d399', '#15803d'] : health.score >= 70 ? ['#fbbf24', '#b45309'] : ['#f87171', '#b91c1c']) as [string, string];
   const statusLabel = health.score >= 90 ? 'Saludable' : health.score >= 70 ? 'Atención' : 'Crítico';
   const deltaUp = health.deltaPct >= 0;
 
   return (
-    <View style={[styles.healthCard, { borderLeftColor: tone }]}>
-      <View style={[styles.healthScoreBox, { backgroundColor: toneBg }]}>
-        <RNText style={[styles.healthScore, { color: tone }]}>{health.score}</RNText>
-        <RNText style={[styles.healthScoreSub, { color: tone }]}>/100</RNText>
-      </View>
+    <LinearGradient colors={['#1a2332', '#2d3e50', '#3a4f68']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.healthCard}>
+      <LinearGradient colors={ringColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.healthScoreBox}>
+        <RNText style={styles.healthScore}>{health.score}</RNText>
+        <RNText style={styles.healthScoreSub}>/100</RNText>
+      </LinearGradient>
       <View style={styles.healthBody}>
         <View style={styles.healthTitleRow}>
           <RNText style={styles.healthTitle}>Salud del Piso</RNText>
-          <View style={[styles.healthStatusChip, { backgroundColor: toneBg, borderColor: tone + '55' }]}>
+          <View style={[styles.healthStatusChip, { backgroundColor: tone + '22', borderColor: tone + '88' }]}>
             <RNText style={[styles.healthStatusText, { color: tone }]}>{statusLabel}</RNText>
           </View>
         </View>
         <RNText style={styles.healthDetail}>
-          <RNText style={{ color: deltaUp ? C.green : C.red, fontWeight: '800' }}>
+          <RNText style={{ color: deltaUp ? '#34d399' : '#f87171', fontWeight: '800' }}>
             {deltaUp ? '↑' : '↓'} {Math.abs(health.deltaPct).toFixed(1)}%
           </RNText>
           {' '}vs 2025 ({metric === 'avgWin' ? 'Win' : 'Coin-In'})
           {health.alertBanks > 0
-            ? <RNText style={{ color: C.red, fontWeight: '700' }}>  ·  ⚠ {health.alertBanks} {health.alertBanks === 1 ? 'banco' : 'bancos'} con caída &gt;20%</RNText>
+            ? <RNText style={{ color: '#f87171', fontWeight: '700' }}>  ·  ⚠ {health.alertBanks} {health.alertBanks === 1 ? 'banco' : 'bancos'} con caída &gt;20%</RNText>
             : '  ·  sin bancos en alerta'}
         </RNText>
         <RNText style={styles.healthFootnote}>
           % de máquinas comparables sin caída mayor a 15% · {health.comparable} máquinas con dato 2025
         </RNText>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -164,14 +166,16 @@ function ResumeSection({ metric, gutter, onOpenBank, onOpenMfr }: {
     label:   `Banco ${g.bank.padStart(2, '0')}`,
     value:   metric === 'avgWin' ? g.avgWin : g.avgCoinIn,
     display: money(metric === 'avgWin' ? g.avgWin : g.avgCoinIn, 0),
-    color:   C.green,
+    color:   '#34d399',
+    colorTo: '#15803d',
   }));
   const worstBars: HBarItem[] = worst.map(g => ({
     key:     g.bank,
     label:   `Banco ${g.bank.padStart(2, '0')}`,
     value:   metric === 'avgWin' ? g.avgWin : g.avgCoinIn,
     display: money(metric === 'avgWin' ? g.avgWin : g.avgCoinIn, 0),
-    color:   C.red,
+    color:   '#f87171',
+    colorTo: '#b91c1c',
   }));
 
   const winPctStr = floorStats.winPct.toFixed(1) + '%';
@@ -1425,18 +1429,28 @@ export default function DashboardScreen() {
   return (
     <View style={styles.root}>
       <SafeAreaView edges={['top']} style={styles.topSafe}>
-        {/* Top bar — responsive: taller + larger logo on desktop */}
-        <View style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 14 : 10 }]}>
+        {/* Top bar — navy-to-navy gradient banner, gold accents. Taller + larger logo on desktop. */}
+        <LinearGradient
+          colors={['#1a2332', '#2d3e50', '#3a4f68']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 16 : 12 }]}
+        >
           <View style={styles.brandRow}>
-            <View style={[styles.logoMark, isDesktop && styles.logoMarkLg]}>
+            <LinearGradient
+              colors={['#e6c9a8', '#d4a574', '#b8935f']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.logoMark, isDesktop && styles.logoMarkLg]}
+            >
               <View style={[styles.logoChipRing, isDesktop && styles.logoChipRingLg]}>
                 <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
               </View>
-            </View>
+            </LinearGradient>
             <View>
               <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
               <View style={styles.periodChip}>
-                <Ionicons name="calendar-outline" size={11} color={C.gold} />
+                <Ionicons name="calendar-outline" size={11} color="#e6c9a8" />
                 <RNText style={styles.periodChipText}>Período: {periodLabel}</RNText>
               </View>
             </View>
@@ -1449,7 +1463,7 @@ export default function DashboardScreen() {
               style={[styles.searchBtn, searchOpen && styles.searchBtnActive]}
               hoverScale={1.08}
             >
-              <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={searchOpen ? '#fff' : C.navy3} />
+              <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={searchOpen ? '#1a2332' : '#fff'} />
             </Pressable>
             {showMetricToggle && (
               <View style={styles.metricToggle}>
@@ -1457,16 +1471,23 @@ export default function DashboardScreen() {
                 <Switch
                   value={metric === 'avgWin'}
                   onValueChange={v => setMetric(v ? 'avgWin' : 'avgCoinIn')}
-                  trackColor={{ false: C.navy3 + '55', true: C.green + '88' }}
-                  thumbColor={metric === 'avgWin' ? C.green : C.navy3}
+                  trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#34d399' }}
+                  thumbColor={metric === 'avgWin' ? '#15803d' : '#cbd5e1'}
                   style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                 />
                 <RNText style={[styles.metricLabel, metric === 'avgWin' && styles.metricLabelActive]}>Win</RNText>
               </View>
             )}
-            <Pressable onPress={handleGenerateReport} style={styles.reportBtn} hoverScale={1.04}>
-              <Ionicons name="document-text-outline" size={15} color="#fff" />
-              {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
+            <Pressable onPress={handleGenerateReport} hoverScale={1.04}>
+              <LinearGradient
+                colors={['#e6c9a8', '#d4a574', '#b8935f']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.reportBtn}
+              >
+                <Ionicons name="document-text-outline" size={15} color="#1a2332" />
+                {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
+              </LinearGradient>
             </Pressable>
             {profile && (
               <View style={[styles.roleBadge, profile.role === 'admin' ? styles.adminBadge : styles.viewerBadgeStyle]}>
@@ -1476,10 +1497,10 @@ export default function DashboardScreen() {
               </View>
             )}
             <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn} hoverScale={1.1}>
-              <Ionicons name="log-out-outline" size={22} color={C.navy3} />
+              <Ionicons name="log-out-outline" size={22} color="rgba(255,255,255,0.85)" />
             </Pressable>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Global search bar */}
         {searchOpen && (
@@ -1549,59 +1570,59 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   root:     { flex: 1, backgroundColor: C.page },
-  topSafe:  { backgroundColor: C.card },
+  topSafe:  { backgroundColor: '#1a2332' },
   topBar: {
     flexDirection:    'row',
     justifyContent:   'space-between',
     alignItems:       'center',
     paddingHorizontal: 16,
     paddingVertical:   10,
-    backgroundColor:  C.card,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
   },
   brandRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: CHIP_BLUE,
+    width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
+    shadowColor: '#d4a574', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 4,
   },
   logoMarkLg:     { width: 44, height: 44, borderRadius: 22 },
   logoChipRing: {
     width: 22, height: 22, borderRadius: 11,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(26,35,50,0.25)',
     alignItems: 'center', justifyContent: 'center',
   },
   logoChipRingLg: { width: 32, height: 32, borderRadius: 16 },
   logoMarkText:   { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
-  brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
-  brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
+  brandText:      { fontSize: 13, fontWeight: '600', color: '#fff' },
+  brandTextLg:    { fontSize: 17, fontWeight: '700', color: '#fff', fontFamily: typography.display.fontFamily, letterSpacing: -0.2 },
   brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
   periodChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
     alignSelf: 'flex-start',
-    backgroundColor: '#fdf5e7', borderRadius: 6,
+    backgroundColor: 'rgba(212,165,116,0.16)', borderRadius: 6,
     paddingHorizontal: 7, paddingVertical: 2,
-    borderWidth: 1, borderColor: C.gold + '55',
+    borderWidth: 1, borderColor: 'rgba(230,201,168,0.45)',
   },
-  periodChipText: { fontSize: 10, fontWeight: '700', color: '#b8863f', letterSpacing: 0.2 },
+  periodChipText: { fontSize: 10, fontWeight: '700', color: '#e6c9a8', letterSpacing: 0.2 },
   logoMarkTextLg: { fontSize: 12 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: C.navy, borderRadius: 10,
+    borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 8,
+    shadowColor: '#d4a574', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 3,
   },
-  reportBtnText: { fontSize: 12, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  reportBtnText: { fontSize: 12, fontWeight: '700', color: '#1a2332', letterSpacing: 0.2 },
   metricToggle:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  metricLabel:    { fontSize: 11, fontWeight: '600', color: C.muted },
-  metricLabelActive: { color: C.navy, fontWeight: '700' },
+  metricLabel:    { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.55)' },
+  metricLabelActive: { color: '#fff', fontWeight: '700' },
   roleBadge:      { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  adminBadge:     { backgroundColor: '#f6ecdd', borderWidth: 1, borderColor: C.gold },
-  viewerBadgeStyle: { backgroundColor: '#eef1f5' },
+  adminBadge:     { backgroundColor: 'rgba(212,165,116,0.18)', borderWidth: 1, borderColor: '#d4a574' },
+  viewerBadgeStyle: { backgroundColor: 'rgba(255,255,255,0.10)' },
   roleText:       { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  adminText:      { color: C.gold },
-  viewerText:     { color: C.navy3 },
+  adminText:      { color: '#e6c9a8' },
+  viewerText:     { color: 'rgba(255,255,255,0.7)' },
   logoutBtn:      { padding: 2 },
 
   section:        { flex: 1 },
@@ -1668,42 +1689,44 @@ const styles = StyleSheet.create({
   healthCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    backgroundColor: C.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderLeftWidth: 5,
-    padding: 16,
+    gap: 18,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#0c121c',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 6,
   },
   healthScoreBox: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 3,
   },
-  healthScore:    { fontSize: 34, fontWeight: '900', letterSpacing: -1.5 },
-  healthScoreSub: { fontSize: 13, fontWeight: '700', opacity: 0.7 },
+  healthScore:    { fontFamily: typography.display.fontFamily, fontSize: 36, fontWeight: '900', letterSpacing: -1.5, color: '#fff' },
+  healthScoreSub: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.75)' },
   healthBody:     { flex: 1, gap: 4 },
   healthTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  healthTitle:    { fontSize: 16, fontWeight: '800', color: C.navy, letterSpacing: -0.2 },
+  healthTitle:    { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.2, fontFamily: typography.display.fontFamily },
   healthStatusChip: {
     borderRadius: 999, borderWidth: 1,
     paddingHorizontal: 10, paddingVertical: 3,
   },
   healthStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
-  healthDetail:     { fontSize: 13, color: C.text, lineHeight: 19 },
-  healthFootnote:   { fontSize: 10.5, color: C.faint },
+  healthDetail:     { fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 19 },
+  healthFootnote:   { fontSize: 10.5, color: 'rgba(255,255,255,0.45)' },
 
   // ── Global search ───────────────────────────────────────────────────────────
   searchBtn: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: C.page, borderWidth: 1, borderColor: C.border,
+    backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
   searchBtnActive: {
-    backgroundColor: C.navy, borderColor: C.navy,
+    backgroundColor: '#e6c9a8', borderColor: '#e6c9a8',
   },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

@@ -37,7 +37,11 @@ function BetRangeCol({ minBet, maxBet }: { minBet: number; maxBet: number | null
 
 export function MachineRow({ machine: m, onEdit }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
-  const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
+  // Multi-denomination machines have a separate max bet per denomination tier;
+  // the true machine max is whichever tier's max is highest, not the first
+  // tier that happens to be set.
+  const hasMaxBet = m.maxBet01 != null || m.maxBet02 != null || m.maxBet05 != null || m.maxBet10 != null;
+  const maxBet = hasMaxBet ? Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0) : null;
   // WWCJPR = Win Without Comisión de Juegos de PR (Avg Win after deducting 50% CJPR fee)
   const wwcjpr = m.avgWin != null ? m.avgWin * 0.50 : null;
 

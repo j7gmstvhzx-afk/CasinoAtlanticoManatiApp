@@ -258,7 +258,17 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 type DateFieldProps = { label: string; value: string; onChange: (v: string) => void; editable: boolean };
 
-// Native HTML date selector on web (calendar picker); plain masked input on iOS/Android.
+// Reformats free-typed digits into YYYY-MM-DD as the user types, so native
+// (non-web) entry can't drift into an unparseable string.
+function maskDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  const y = digits.slice(0, 4);
+  const m = digits.slice(4, 6);
+  const d = digits.slice(6, 8);
+  return [y, m, d].filter(Boolean).join('-');
+}
+
+// Native HTML date selector on web (calendar picker); digit-masked input on iOS/Android.
 function DateField({ label, value, onChange, editable }: DateFieldProps) {
   return (
     <View>
@@ -288,10 +298,12 @@ function DateField({ label, value, onChange, editable }: DateFieldProps) {
         <TextInput
           style={s.input}
           value={value}
-          onChangeText={onChange}
+          onChangeText={v => onChange(maskDateInput(v))}
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#94a3b8"
           editable={editable}
+          keyboardType="number-pad"
+          maxLength={10}
         />
       )}
     </View>

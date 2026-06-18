@@ -19,26 +19,28 @@ export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
   const gradient = TONE_GRADIENTS[tone];
   return (
     <View style={[styles.card, { shadowColor: t.fg }]}>
-      <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topAccent} />
-      <View style={styles.header}>
-        {icon ? (
-          <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.iconBadge}>
-            <Ionicons name={icon} size={18} color="#fff" />
-          </LinearGradient>
-        ) : null}
-        <Text style={styles.label} numberOfLines={2}>{label}</Text>
+      <View style={styles.cardInner}>
+        <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topAccent} />
+        <View style={styles.header}>
+          {icon ? (
+            <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.iconBadge}>
+              <Ionicons name={icon} size={18} color="#fff" />
+            </LinearGradient>
+          ) : null}
+          <Text style={styles.label} numberOfLines={2}>{label}</Text>
+        </View>
+
+        <Text
+          style={[styles.value, { color: t.fg }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
+        >
+          {value}
+        </Text>
+
+        {sub ? <Text style={styles.sub}>{sub}</Text> : null}
       </View>
-
-      <Text
-        style={[styles.value, { color: t.fg }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.55}
-      >
-        {value}
-      </Text>
-
-      {sub ? <Text style={styles.sub}>{sub}</Text> : null}
     </View>
   );
 }
@@ -49,15 +51,21 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 200,
     minWidth: 168,
-    backgroundColor: C.card,
     borderRadius: 18,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: C.border,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.14,
     shadowRadius: 20,
     elevation: 2,
+  },
+  // Separate from `card`: `overflow: hidden` clips the gradient accent bar
+  // to the rounded corners, but on iOS it also clips the drop shadow if
+  // applied to the same view — so the shadow lives on the outer `card`.
+  cardInner: {
+    borderRadius: 18,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 20,
     gap: 12,
     overflow: 'hidden',
   },

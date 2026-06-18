@@ -27,6 +27,11 @@ export const palette = {
   amber:        '#f59e0b',
   violet:       '#8b5cf6',
   atlanticCore: '#3D6FB8',
+
+  // Chip blue (login screen accents)
+  chipBlue:     '#2457b5',
+  chipBlueDark: '#1a3e96',
+  chipBlueMid:  '#3568c8',
 };
 
 export const colors = {

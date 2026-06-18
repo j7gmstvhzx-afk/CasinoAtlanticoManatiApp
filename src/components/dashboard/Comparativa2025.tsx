@@ -3,7 +3,7 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, money, mfrColor, shortMfr, bankOf } from './shared';
+import { C, money, mfrColor, shortMfr, bankOf, positionOf } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { AnimatedChevron } from './AnimatedChevron';
 import { DeltaBar } from './DeltaBar';
@@ -40,12 +40,14 @@ type BankCompare = {
 
 // ── Delta math ────────────────────────────────────────────────────────────────
 
-type Delta = { diff: number; pct: number; dir: 'up' | 'down' | 'flat' };
+// `pct` is null when the 2025 baseline is exactly zero — there's no finite
+// percent change to show (matches groupDelta's null-on-zero-baseline rule).
+type Delta = { diff: number; pct: number | null; dir: 'up' | 'down' | 'flat' };
 
 function diffOf(now: number, then: number): Delta {
   const diff = now - then;
   if (Math.abs(diff) < 0.005) return { diff: 0, pct: 0, dir: 'flat' };
-  const pct = then !== 0 ? (diff / then) * 100 : 0;
+  const pct = then !== 0 ? (diff / then) * 100 : null;
   return { diff, pct, dir: diff > 0 ? 'up' : 'down' };
 }
 
@@ -58,7 +60,7 @@ function DeltaChip({ d, compact = false }: { d: Delta; compact?: boolean }) {
     <View style={[styles.deltaChip, { borderColor: color + '45', backgroundColor: color + '12' }]}>
       <Ionicons name={DIR_ICON[d.dir]} size={compact ? 9 : 10} color={color} />
       <Text style={[styles.deltaChipText, compact && { fontSize: 9 }, { color }]}>
-        {d.dir === 'up' ? '+' : ''}{d.pct.toFixed(1)}%
+        {d.pct == null ? 'nuevo' : `${d.dir === 'up' ? '+' : ''}${d.pct.toFixed(1)}%`}
       </Text>
     </View>
   );
@@ -83,7 +85,7 @@ function buildComparisons(machines: SlotMachine[]): BankCompare[] {
   return Array.from(byBank.entries())
     .map(([bank, rows]) => {
       const sorted = [...rows].sort((a, b) =>
-        parseInt(a.machine.location.split('-')[1] ?? '0', 10) - parseInt(b.machine.location.split('-')[1] ?? '0', 10));
+        positionOf(a.machine.location) - positionOf(b.machine.location));
       const matchedRows = sorted.filter(isComparable);
       const n = matchedRows.length || 1;
       const sum = (pick: (r: Row) => number) => matchedRows.reduce((s, r) => s + pick(r), 0);

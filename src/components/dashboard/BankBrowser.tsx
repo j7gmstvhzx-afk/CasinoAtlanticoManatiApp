@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
-import { C, money } from './shared';
+import { C, money, positionOf } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { AnimatedChevron } from './AnimatedChevron';
 import { MachineRow } from './MachineRow';
@@ -45,8 +45,11 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
   const { width } = useWindowDimensions();
   const isWide = width >= 640;
 
+  // Drill-down target: open while focused, close again once focus moves to
+  // another bank (otherwise a card stays force-expanded for the rest of the
+  // session once the parent stops remounting on every focus change).
   useEffect(() => {
-    if (focused) setExpanded(true);
+    setExpanded(Boolean(focused));
   }, [focused]);
 
   // Headline metrics: Avg Coin-In / Avg Win PER MACHINE — what actually ranks the bank
@@ -90,8 +93,8 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
               <Text style={[styles.rankText, { color: ri.color }]}>{ri.label}</Text>
             </View>
           )}
-          <Text style={styles.avgLabel}>Total CI: {money(group.totalCoinIn, 0)} · Win: {money(group.totalWin, 0)}</Text>
-          <Text style={[styles.avgLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
+          <Text style={styles.metaLabel}>Total CI: {money(group.totalCoinIn, 0)} · Win: {money(group.totalWin, 0)}</Text>
+          <Text style={[styles.metaLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
           <AnimatedChevron expanded={expanded} size={16} color={C.muted} />
         </View>
       </Pressable>
@@ -103,11 +106,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
             <Text style={[styles.mlhText, { marginRight: 8 }]}>CI PD · Win PD · WWCJPR PD · Max Bet</Text>
           </View>
           {[...group.machines]
-            .sort((a, b) => {
-              const aPos = parseInt(a.location.split('-')[1] ?? '0', 10);
-              const bPos = parseInt(b.location.split('-')[1] ?? '0', 10);
-              return aPos - bPos;
-            })
+            .sort((a, b) => positionOf(a.location) - positionOf(b.location))
             .map(m => (
               <MachineRow key={m.id} machine={m} onEdit={onEdit} />
             ))}
@@ -263,7 +262,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  avgLabel: {
+  metaLabel: {
     fontSize: 10,
     color: C.muted,
     textAlign: 'right',

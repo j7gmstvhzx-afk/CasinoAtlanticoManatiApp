@@ -6,7 +6,11 @@ import {
 import { Redirect } from 'expo-router';
 import { Text } from '@/components/ui';
 import { useAuthStore } from '@/store/useAuthStore';
-import { CHIP_BLUE, CHIP_BLUE_DARK, CHIP_BLUE_MID } from '@/components/dashboard/shared';
+import { palette } from '@/theme';
+
+const CHIP_BLUE      = palette.chipBlue;
+const CHIP_BLUE_DARK = palette.chipBlueDark;
+const CHIP_BLUE_MID  = palette.chipBlueMid;
 
 const NAVY   = '#1a2332';
 const NAVY2  = '#243042';

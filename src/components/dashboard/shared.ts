@@ -23,11 +23,6 @@ export const C = {
   rowLine:   '#f4f6f9',
 };
 
-// Brand chip blue (logo, login panel, primary actions).
-export const CHIP_BLUE      = '#2457b5';
-export const CHIP_BLUE_DARK = '#1a3e96';
-export const CHIP_BLUE_MID  = '#3568c8';
-
 // Manufacturer colors (donut + accents). Falls back through a palette.
 const MFR_COLORS: Record<string, string> = {
   'Konami':         C.navy,
@@ -61,6 +56,13 @@ export function compactMoney(n: number): string {
 
 export function bankOf(location: string): string {
   return location.split('-')[0];
+}
+
+// Position number within a bank ("BB-PP" → PP). Malformed/missing positions
+// sort to the end (Infinity) rather than silently to the front as "0".
+export function positionOf(location: string): number {
+  const n = parseInt(location.split('-')[1] ?? '', 10);
+  return Number.isNaN(n) ? Infinity : n;
 }
 
 // ── Responsive layout ────────────────────────────────────────────────────────

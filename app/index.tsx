@@ -311,7 +311,7 @@ function AnalisisSection({ metric, gutter, onOpenBank }: {
     for (const item of sortedDesc) {
       acc += item.value;
       coreCount++;
-      if (acc / grandTotal > 0.8 && coreCount > 0) break;
+      if (acc / grandTotal > 0.8) break;
     }
 
     // Box plots: spread per manufacturer.

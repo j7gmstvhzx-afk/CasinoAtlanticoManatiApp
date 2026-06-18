@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -25,10 +25,14 @@ type Props = {
 // Bar fill animates from 0 on mount, staggered top→bottom.
 function AnimatedFill({ pct, color, colorTo, delay }: { pct: number; color: string; colorTo?: string; delay: number }) {
   const width = useSharedValue(0);
+  // Captured once: re-sorting `data` reassigns each item's index (and thus
+  // `delay`) on every render, but an already-mounted bar shouldn't replay
+  // its staggered entrance just because its position in the list shifted.
+  const mountDelay = useRef(delay).current;
 
   useEffect(() => {
-    width.value = withDelay(delay, withTiming(pct, { duration: 360 }));
-  }, [pct, delay, width]);
+    width.value = withDelay(mountDelay, withTiming(pct, { duration: 360 }));
+  }, [pct, mountDelay, width]);
 
   const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
 

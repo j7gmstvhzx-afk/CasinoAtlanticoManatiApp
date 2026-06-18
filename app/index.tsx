@@ -4,7 +4,10 @@ import {
   StyleSheet, Switch, Text as RNText, TextInput, View,
   useWindowDimensions,
 } from 'react-native';
-import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
+import Animated, {
+  FadeIn, FadeInLeft, FadeInRight, FadeInDown,
+  useSharedValue, useAnimatedStyle, withDelay, withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +29,8 @@ import { Histogram } from '@/components/dashboard/Histogram';
 import { ScatterPlot, quadrantOf, QUADRANT_META, type ScatterPoint } from '@/components/dashboard/ScatterPlot';
 import { ParetoChart } from '@/components/dashboard/ParetoChart';
 import { BoxPlotRows, type BoxPlotGroup } from '@/components/dashboard/BoxPlotRows';
-import { C, card, money, mfrColor, shortMfr, bankOf } from '@/components/dashboard/shared';
+import { ChangesTimeline, type TimelineBucket } from '@/components/dashboard/ChangesTimeline';
+import { C, card, money, mfrColor, shortMfr, bankOf, TONES, type Tone } from '@/components/dashboard/shared';
 import { typography } from '@/theme';
 import { describe } from '@/lib/stats';
 import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
@@ -52,11 +56,17 @@ const CHANGE_LABELS: Record<string, string> = {
   cambio_juego: 'Cambio de Juego',
   removida:     'Removida',
 };
+const CHANGE_TONE: Record<string, Tone> = {
+  compra:       'green',
+  reubicacion:  'gold',
+  cambio_juego: 'teal',
+  removida:     'red',
+};
 const CHANGE_COLORS: Record<string, string> = {
-  compra:       C.green,
-  reubicacion:  C.gold,
-  cambio_juego: C.navy3,
-  removida:     C.red,
+  compra:       TONES.green.fg,
+  reubicacion:  TONES.gold.fg,
+  cambio_juego: TONES.teal.fg,
+  removida:     TONES.red.fg,
 };
 
 // ── Floor health (Resumen hero card) ──────────────────────────────────────────
@@ -695,6 +705,32 @@ const MFR_SORT_OPTIONS: { id: MfrSortKey; label: string; topLabel: string }[] = 
   { id: 'count',     label: 'Máquinas',       topLabel: '🏆 Más Máquinas' },
 ];
 
+// Animates the "vs floor" bar fill from 0 on mount, staggered top→bottom —
+// same idiom as HBars.AnimatedFill. `useRef` captures the delay once so a
+// re-sort (which reassigns each card's index) doesn't replay the entrance
+// on a bar that's already on screen.
+function MfrBarFill({ widthPct, color, delay }: { widthPct: number; color: string; delay: number }) {
+  const width = useSharedValue(0);
+  const mountDelay = useRef(delay).current;
+
+  useEffect(() => {
+    width.value = withDelay(mountDelay, withTiming(widthPct, { duration: 360 }));
+  }, [widthPct, mountDelay, width]);
+
+  const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
+
+  return (
+    <Animated.View style={[styles.mfrBarFillWrap, animated]}>
+      <LinearGradient
+        colors={[color, color + 'aa']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.mfrBarFill}
+      />
+    </Animated.View>
+  );
+}
+
 function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highlightMfr?: string | null }) {
   const machines = useActiveMachines();
   const floorStats = useSlotFloorStore(s => s.floorStats);
@@ -779,12 +815,18 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
         </View>
       </View>
 
-      {/* Per-manufacturer cards */}
+      {/* Per-manufacturer cards — keyed by sortKey so re-sorting remounts the
+          list and replays the staggered entrance in the new order. */}
+      <View key={sortKey}>
       {rows.map((r, idx) => {
         const abovePct  = r.vsFloor - 100;
         const fillWidth = Math.min(Math.max(r.vsFloor, 10), 190) / 190;
         return (
-          <View key={r.mfr} style={[styles.mfrCard, idx === 0 && styles.mfrCardTop, highlightMfr === r.mfr && styles.mfrCardFocused]}>
+          <Animated.View
+            key={r.mfr}
+            entering={FadeInDown.delay(idx * 40).duration(260)}
+            style={[styles.mfrCard, idx === 0 && styles.mfrCardTop, highlightMfr === r.mfr && styles.mfrCardFocused]}
+          >
 
             {/* Header: color bar + name + count */}
             <View style={[styles.mfrColorStripe, { backgroundColor: r.color }]} />
@@ -841,7 +883,7 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
                   </RNText>
                 </View>
                 <View style={styles.mfrBarTrack}>
-                  <View style={[styles.mfrBarFill, { width: `${fillWidth * 100}%` as any, backgroundColor: r.color }]} />
+                  <MfrBarFill widthPct={fillWidth * 100} color={r.color} delay={idx * 40} />
                   <View style={styles.mfrBarMidLine} />
                 </View>
                 <View style={styles.mfrBarEndLabels}>
@@ -851,9 +893,10 @@ function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highligh
                 </View>
               </View>
             </View>
-          </View>
+          </Animated.View>
         );
       })}
+      </View>
 
       <RNText style={styles.footer}>
         Avg Coin-In PD = promedio de lo apostado por máquina en un día · Avg Win PD = ganancia del casino por máquina en un día
@@ -904,7 +947,7 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
   );
 }
 
-function ApuestasSection({ gutter }: { gutter: number }) {
+function ApuestasSection({ gutter, onEdit }: { gutter: number; onEdit: (m: SlotMachine) => void }) {
   const machines = useActiveMachines();
   const [betView, setBetView] = useState<'min' | 'max'>('min');
   const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
@@ -995,14 +1038,16 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </View>
 
-          {/* Rango visual */}
-          <View style={styles.betRangeBar}>
-            <RNText style={styles.betRangeLabel}>{money(minStats.lowest, 2)}</RNText>
-            <View style={styles.betRangeTrack}>
-              <View style={[styles.betRangeFill, { width: `${(minStats.avg / minStats.highest) * 100}%` as any }]} />
-              <View style={styles.betRangeMarker} />
-            </View>
-            <RNText style={styles.betRangeLabel}>{money(minStats.highest, 2)}</RNText>
+          {/* Distribución real de Min Bet */}
+          <View style={[card.base]}>
+            <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Distribución de Apuesta Mínima</RNText></View>
+            <Histogram
+              values={machines.map(m => m.minBet).filter(b => b > 0)}
+              formatValue={v => money(v, 2)}
+              meanValue={minStats.avg}
+              bins={10}
+              color="#2d6a6a"
+            />
           </View>
 
           {/* Segmentos interactivos */}
@@ -1029,16 +1074,13 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </Pressable>
           {expandedDeno === 'acc' && (
-            <View style={styles.betMachineList}>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {minStats.accMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
-                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                  <RNText style={styles.betMcId}>{m.id}</RNText>
-                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                  <RNText style={[styles.betMcVal, { color: '#2d6a6a' }]}>{money(m.minBet, 2)}</RNText>
-                </View>
+                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                  <MachineRow machine={m} onEdit={onEdit} />
+                </Animated.View>
               ))}
-            </View>
+            </Animated.View>
           )}
 
           <Pressable
@@ -1064,16 +1106,13 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </Pressable>
           {expandedDeno === 'high' && (
-            <View style={styles.betMachineList}>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {minStats.highMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
-                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                  <RNText style={styles.betMcId}>{m.id}</RNText>
-                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                  <RNText style={[styles.betMcVal, { color: C.gold }]}>{money(m.minBet, 2)}</RNText>
-                </View>
+                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                  <MachineRow machine={m} onEdit={onEdit} />
+                </Animated.View>
               ))}
-            </View>
+            </Animated.View>
           )}
         </>
       )}
@@ -1132,29 +1171,19 @@ function ApuestasSection({ gutter }: { gutter: number }) {
 
           {/* Expanded deno machine list */}
           {expandedDeno && maxStats.denoBuckets.find(([d]) => d === expandedDeno) && (
-            <View style={styles.betMachineList}>
-              <View style={styles.betMachineListHeader}>
-                <RNText style={styles.betMcHeaderText}>ID · Ubicación · Juego</RNText>
-                <RNText style={styles.betMcHeaderText}>Max Bet</RNText>
-              </View>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {(maxStats.denoBuckets.find(([d]) => d === expandedDeno)![1] as SlotMachine[])
                 .sort((a, b) => {
                   const ba = Math.max(a.maxBet01 ?? 0, a.maxBet02 ?? 0, a.maxBet05 ?? 0, a.maxBet10 ?? 0);
                   const bb = Math.max(b.maxBet01 ?? 0, b.maxBet02 ?? 0, b.maxBet05 ?? 0, b.maxBet10 ?? 0);
                   return bb - ba;
                 })
-                .map((m, i) => {
-                  const mb = Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0);
-                  return (
-                    <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                      <RNText style={styles.betMcId}>{m.id}</RNText>
-                      <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                      <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                      <RNText style={[styles.betMcVal, { color: C.navy }]}>{mb > 0 ? money(mb, 2) : '—'}</RNText>
-                    </View>
-                  );
-                })}
-            </View>
+                .map((m, i) => (
+                  <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                    <MachineRow machine={m} onEdit={onEdit} />
+                  </Animated.View>
+                ))}
+            </Animated.View>
           )}
 
           {/* Top 20 Max Bet chart */}
@@ -1178,7 +1207,7 @@ const CAMBIOS_KPI_DEFS = [
   { type: 'removida',     icon: 'remove-circle-outline'   as const, label: 'Removidas' },
 ];
 
-function CambiosSection({ gutter }: { gutter: number }) {
+function CambiosSection({ gutter, onOpenBank }: { gutter: number; onOpenBank: (bank: string) => void }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
@@ -1201,33 +1230,50 @@ function CambiosSection({ gutter }: { gutter: number }) {
     return Array.from(map.entries());
   }, [changes, typeFilter]);
 
+  // Same date-key derivation as `dateGroups`, but unfiltered and counted by
+  // type so the timeline and KPI cards always agree, and ordered chronologically.
+  const timelineBuckets: TimelineBucket[] = useMemo(() => {
+    const map = new Map<string, TimelineBucket>();
+    for (const c of changes) {
+      const key = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : 'Sin fecha';
+      const sortKey = c.recordedAt ? new Date(c.recordedAt).getTime() : 0;
+      if (!map.has(key)) map.set(key, { date: key, sortKey, counts: {} });
+      const bucket = map.get(key)!;
+      bucket.counts[c.type] = (bucket.counts[c.type] ?? 0) + 1;
+    }
+    return Array.from(map.values()).sort((a, b) => a.sortKey - b.sortKey);
+  }, [changes]);
+
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* KPI dashboard — tap a card to filter the log by that type */}
       {changes.length > 0 && (
-        <View style={styles.cambiosKpiGrid}>
+        <View style={card.base}>
+          <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Cambios por Fecha</RNText></View>
+          <ChangesTimeline
+            buckets={timelineBuckets}
+            colors={CHANGE_COLORS}
+            labels={CHANGE_LABELS}
+            types={CAMBIOS_KPI_DEFS.map(d => d.type)}
+            activeType={typeFilter}
+          />
+        </View>
+      )}
+
+      {/* KPI dashboard — tap a card to filter the log (and dim the chart) by that type */}
+      {changes.length > 0 && (
+        <View style={styles.kpiGrid}>
           {CAMBIOS_KPI_DEFS.map(({ type, icon, label }) => {
-            const color = CHANGE_COLORS[type] ?? C.navy3;
             const active = typeFilter === type;
             return (
-              <Pressable
+              <StatCard
                 key={type}
-                style={[
-                  styles.cambiosKpiCard,
-                  { borderLeftColor: color },
-                  active && { backgroundColor: color + '14', borderColor: color + '66', borderWidth: 1, borderLeftWidth: 4 },
-                ]}
+                label={label}
+                value={String(summary[type])}
+                icon={icon}
+                tone={CHANGE_TONE[type] ?? 'navy'}
                 onPress={() => setTypeFilter(active ? null : type)}
-                hoverScale={1.02}
-              >
-                <View style={[styles.cambiosKpiIcon, { backgroundColor: color + '20' }]}>
-                  <Ionicons name={icon} size={22} color={color} />
-                </View>
-                <View style={styles.cambiosKpiBody}>
-                  <RNText style={[styles.cambiosKpiCount, { color }]}>{summary[type]}</RNText>
-                  <RNText style={styles.cambiosKpiLabel}>{label}{active ? ' ✓' : ''}</RNText>
-                </View>
-              </Pressable>
+                active={active}
+              />
             );
           })}
         </View>
@@ -1255,7 +1301,7 @@ function CambiosSection({ gutter }: { gutter: number }) {
               </View>
               <View style={[card.base, { padding: 0, overflow: 'hidden' }]}>
                 {group.map((c, i) => (
-                  <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} />
+                  <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} onOpenBank={onOpenBank} />
                 ))}
               </View>
             </View>
@@ -1269,7 +1315,7 @@ function CambiosSection({ gutter }: { gutter: number }) {
   );
 }
 
-function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) {
+function ChangeRow({ change: c, alt, onOpenBank }: { change: MachineChange; alt: boolean; onOpenBank: (bank: string) => void }) {
   const color = CHANGE_COLORS[c.type] ?? C.navy3;
   const date  = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : '—';
 
@@ -1301,6 +1347,14 @@ function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) 
         {c.periodLabel ? <RNText style={styles.changePeriod}>{c.periodLabel}</RNText> : null}
       </View>
       <RNText style={styles.changeDate}>{date}</RNText>
+      <Pressable
+        style={styles.changeBankBtn}
+        onPress={() => onOpenBank(String(c.bank).padStart(2, '0'))}
+        hoverScale={1.04}
+      >
+        <RNText style={styles.changeBankBtnText}>Ver banco</RNText>
+        <Ionicons name="arrow-forward" size={12} color={C.navy3} />
+      </Pressable>
     </View>
   );
 }
@@ -1550,8 +1604,8 @@ export default function DashboardScreen() {
               {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} focusBank={focusBank} />}
               {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
               {tab === 'fabricantes' && <FabricantesSection gutter={gutter} highlightMfr={focusMfr} />}
-              {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
-              {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
+              {tab === 'apuestas'    && <ApuestasSection gutter={gutter} onEdit={setEditMachine} />}
+              {tab === 'cambios'     && <CambiosSection gutter={gutter} onOpenBank={openBank} />}
             </>
           )}
         </Animated.View>
@@ -1802,22 +1856,6 @@ const styles = StyleSheet.create({
   },
   betHeroSub: { fontSize: 11, color: C.muted },
 
-  betRangeBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: C.card, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: C.border,
-  },
-  betRangeLabel: { fontSize: 12, fontWeight: '700', color: C.navy3 },
-  betRangeTrack: {
-    flex: 1, height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden', position: 'relative',
-  },
-  betRangeFill: {
-    height: '100%', backgroundColor: '#2d6a6a', borderRadius: 5,
-  },
-  betRangeMarker: {
-    position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, backgroundColor: C.gold,
-  },
-
   betSegPress: {
     backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
     borderColor: C.border, borderLeftWidth: 5, overflow: 'hidden',
@@ -1840,23 +1878,9 @@ const styles = StyleSheet.create({
   betStatLab: { fontSize: 10, color: C.muted, marginTop: 2 },
 
   betMachineList: {
-    backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
+    borderRadius: 14, borderWidth: 1,
     borderColor: C.border, overflow: 'hidden', marginTop: -4,
   },
-  betMachineListHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: C.border,
-  },
-  betMcHeaderText: { fontSize: 10, fontWeight: '700', color: C.muted, letterSpacing: 0.4 },
-  betMachineRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 9,
-    paddingHorizontal: 14, gap: 8, backgroundColor: C.card,
-  },
-  betMcId:   { fontSize: 12, fontWeight: '800', color: C.navy, width: 42 },
-  betMcLoc:  { fontSize: 11, color: C.gold, fontWeight: '700', width: 46 },
-  betMcGame: { flex: 1, fontSize: 12, color: C.text },
-  betMcVal:  { fontSize: 13, fontWeight: '800', minWidth: 48, textAlign: 'right' },
 
   denoStatCard: {
     flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 16,
@@ -1936,23 +1960,6 @@ const styles = StyleSheet.create({
   mfrDot:         { width: 8, height: 8, borderRadius: 4 },
   tdMfr:          { fontSize: 12, fontWeight: '600', color: C.text },
 
-  cambiosKpiGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20,
-  },
-  cambiosKpiCard: {
-    flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.card, borderRadius: 14, padding: 16,
-    borderLeftWidth: 4,
-    shadowColor: '#1a2332', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
-  },
-  cambiosKpiIcon: {
-    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-  },
-  cambiosKpiBody:  { flex: 1 },
-  cambiosKpiCount: { fontSize: 30, fontWeight: '800', lineHeight: 34 },
-  cambiosKpiLabel: { fontSize: 12, color: C.muted, fontWeight: '600', marginTop: 2 },
-
   cambiosFilterNote: {
     fontSize: 12, color: C.muted, fontStyle: 'italic',
   },
@@ -1981,6 +1988,12 @@ const styles = StyleSheet.create({
   changeLocationLine: { fontSize: 13, color: C.navy3, marginTop: 2, fontWeight: '600' },
   changePeriod:       { fontSize: 11, color: C.muted, marginTop: 2 },
   changeDate:         { fontSize: 13, color: C.muted, fontWeight: '500' },
+  changeBankBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7,
+    backgroundColor: '#eef1f5', borderWidth: 1, borderColor: C.border,
+  },
+  changeBankBtnText: { fontSize: 11, fontWeight: '700', color: C.navy3 },
 
   emptyState: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12,
@@ -2119,7 +2132,8 @@ const styles = StyleSheet.create({
     height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden',
     position: 'relative',
   },
-  mfrBarFill:    { height: '100%', borderRadius: 5 },
+  mfrBarFillWrap: { height: '100%', borderRadius: 5, overflow: 'hidden', minWidth: 6 },
+  mfrBarFill:     { flex: 1, borderRadius: 5 },
   mfrBarMidLine: {
     position: 'absolute', left: '52.6%', top: 0, bottom: 0,
     width: 2, backgroundColor: C.navy3 + '66',

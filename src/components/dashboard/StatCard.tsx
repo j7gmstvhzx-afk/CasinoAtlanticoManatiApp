@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { typography } from '@/theme';
 import { C, TONES, TONE_GRADIENTS, type Tone } from './shared';
+import { AnimatedPressable } from './AnimatedPressable';
 
 type Props = {
   label: string;
@@ -12,14 +13,23 @@ type Props = {
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: Tone;
   sub?: string;
+  /** When set, the card becomes pressable (e.g. tap-to-filter KPI cards). */
+  onPress?: () => void;
+  /** Tints the card with its tone when it represents an active filter/selection. */
+  active?: boolean;
 };
 
-export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
+export function StatCard({ label, value, icon, tone = 'navy', sub, onPress, active }: Props) {
   const t = TONES[tone];
   const gradient = TONE_GRADIENTS[tone];
+  const Wrapper = onPress ? AnimatedPressable : View;
+  const wrapperProps = onPress ? { onPress, hoverScale: 1.01 } : {};
   return (
-    <View style={[styles.card, { shadowColor: t.fg }]}>
-      <View style={styles.cardInner}>
+    <Wrapper
+      style={[styles.card, { shadowColor: t.fg }, active && { shadowOpacity: 0.22 }]}
+      {...wrapperProps}
+    >
+      <View style={[styles.cardInner, active && { backgroundColor: t.bg, borderColor: t.fg + '55' }]}>
         <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topAccent} />
         <View style={styles.header}>
           {icon ? (
@@ -41,7 +51,7 @@ export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
 
         {sub ? <Text style={styles.sub}>{sub}</Text> : null}
       </View>
-    </View>
+    </Wrapper>
   );
 }
 

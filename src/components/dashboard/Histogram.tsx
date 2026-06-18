@@ -29,7 +29,12 @@ export function Histogram({
   meanValue,
   medianValue,
 }: Props) {
-  const [active, setActive] = useState<number | null>(null);
+  // `pinned` persists across a click (tap on mobile, click on web) regardless
+  // of hover state; `hovered` is a transient highlight while the pointer is
+  // over a bar. Hovering away from a pinned bar must not clear the pin.
+  const [pinned, setPinned] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const active = hovered ?? pinned;
 
   const model = useMemo(() => {
     if (values.length === 0) return null;
@@ -80,9 +85,9 @@ export function Histogram({
               key={i}
               style={styles.barSlot}
               hoverScale={1}
-              onPress={() => setActive(a => (a === i ? null : i))}
-              onHoverIn={() => setActive(i)}
-              onHoverOut={() => setActive(a => (a === i ? null : a))}
+              onPress={() => setPinned(p => (p === i ? null : i))}
+              onHoverIn={() => setHovered(i)}
+              onHoverOut={() => setHovered(h => (h === i ? null : h))}
             >
               {isActive && (
                 <ChartTooltip

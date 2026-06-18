@@ -25,7 +25,12 @@ type Props = {
 // spread (min–max whiskers), the middle 50% (Q1–Q3 box) and the median tick —
 // averages hide dispersion; this makes it visible per group.
 export function BoxPlotRows({ groups, formatValue, referenceValue, referenceLabel }: Props) {
-  const [active, setActive] = useState<string | null>(null);
+  // `pinned` persists across a click regardless of hover state; `hovered` is
+  // a transient highlight while the pointer is over a row. Hovering away
+  // from a pinned row must not clear the pin.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const active = hovered ?? pinned;
 
   const model = useMemo(() => {
     const stats = groups
@@ -73,9 +78,9 @@ export function BoxPlotRows({ groups, formatValue, referenceValue, referenceLabe
             <AnimatedPressable
               style={[styles.row, isActive && styles.rowActive]}
               hoverScale={1}
-              onPress={() => setActive(a => (a === s.key ? null : s.key))}
-              onHoverIn={() => setActive(s.key)}
-              onHoverOut={() => setActive(a => (a === s.key ? null : a))}
+              onPress={() => setPinned(p => (p === s.key ? null : s.key))}
+              onHoverIn={() => setHovered(s.key)}
+              onHoverOut={() => setHovered(h => (h === s.key ? null : h))}
             >
               <View style={styles.labelCol}>
                 <Text style={styles.label} numberOfLines={1}>{s.label}</Text>

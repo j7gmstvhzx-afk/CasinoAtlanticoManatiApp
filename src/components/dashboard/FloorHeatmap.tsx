@@ -40,14 +40,17 @@ function metricOf(g: BankGroup, metric: Metric): number {
 }
 
 // Avg delta vs the 2025 snapshot for the bank's comparable machines (both the
-// position's 2025 reference and current data must exist), or null if none.
+// position's 2025 reference and current value for the active metric must
+// exist), or null if none.
 function bankDelta2025(g: BankGroup, metric: Metric): number | null {
   let nowSum = 0, thenSum = 0, n = 0;
   for (const m of g.machines) {
     const ref = SLOT_FLOOR_2025[m.location];
-    if (!ref || m.avgCoinIn == null || m.avgWin == null) continue;
-    nowSum  += metric === 'avgWin' ? m.avgWin : m.avgCoinIn;
-    thenSum += metric === 'avgWin' ? ref.avgWin : ref.avgCoinIn;
+    const now = metric === 'avgWin' ? m.avgWin : m.avgCoinIn;
+    const then = ref ? (metric === 'avgWin' ? ref.avgWin : ref.avgCoinIn) : null;
+    if (now == null || then == null) continue;
+    nowSum  += now;
+    thenSum += then;
     n++;
   }
   if (n === 0 || thenSum === 0) return null;

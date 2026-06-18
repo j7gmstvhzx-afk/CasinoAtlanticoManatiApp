@@ -24,7 +24,12 @@ type Props = {
 // total) are highlighted; the rest fade out. Answers "where is the money?".
 export function ParetoChart({ items, formatValue, threshold = 0.8, height = 170 }: Props) {
   const [width, setWidth] = useState(0);
-  const [active, setActive] = useState<string | null>(null);
+  // `pinned` persists across a click regardless of hover state; `hovered` is
+  // a transient highlight while the pointer is over a bar. Hovering away
+  // from a pinned bar must not clear the pin.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const active = hovered ?? pinned;
 
   const model = useMemo(() => {
     const sorted = [...items].sort((a, b) => b.value - a.value);
@@ -72,9 +77,9 @@ export function ParetoChart({ items, formatValue, threshold = 0.8, height = 170 
                 key={r.key}
                 style={styles.barSlot}
                 hoverScale={1}
-                onPress={() => setActive(a => (a === r.key ? null : r.key))}
-                onHoverIn={() => setActive(r.key)}
-                onHoverOut={() => setActive(a => (a === r.key ? null : a))}
+                onPress={() => setPinned(p => (p === r.key ? null : r.key))}
+                onHoverIn={() => setHovered(r.key)}
+                onHoverOut={() => setHovered(h => (h === r.key ? null : h))}
               >
                 {isActive && (
                   <ChartTooltip

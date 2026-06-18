@@ -68,7 +68,7 @@ const CHANGE_COLORS: Record<string, string> = {
 
 function computeFloorHealth(machines: SlotMachine[], metric: Metric) {
   const pick = (m: { avgCoinIn?: number | null; avgWin?: number | null }) =>
-    metric === 'avgWin' ? m.avgWin ?? 0 : m.avgCoinIn ?? 0;
+    metric === 'avgWin' ? m.avgWin : m.avgCoinIn;
 
   let comparable = 0, healthy = 0, nowSum = 0, thenSum = 0;
   const bankNow = new Map<string, number>();
@@ -76,8 +76,8 @@ function computeFloorHealth(machines: SlotMachine[], metric: Metric) {
 
   for (const m of machines) {
     const ref = SLOT_FLOOR_2025[m.location];
-    if (!ref || m.avgCoinIn == null || m.avgWin == null) continue;
-    const now = pick(m), then = pick(ref);
+    const now = pick(m), then = ref ? pick(ref) : null;
+    if (now == null || then == null) continue;
     comparable++;
     nowSum += now; thenSum += then;
     if (then === 0 || (now - then) / then >= -0.15) healthy++;
@@ -188,7 +188,7 @@ function ResumeSection({ metric, gutter, onOpenBank, onOpenMfr }: {
 
       {/* KPI grid — auto-reflows across screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
+        <StatCard label="Máquinas Activas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
         <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio apostado por máquina al día" />
         <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia del casino por máquina al día" />
         <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win ÷ Coin-In · retención del casino" />

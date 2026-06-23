@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { motion } from '@/theme';
 
 type Props = {
   expanded: boolean;
@@ -14,7 +15,7 @@ export function AnimatedChevron({ expanded, size = 16, color }: Props) {
   const rotation = useSharedValue(expanded ? 180 : 0);
 
   useEffect(() => {
-    rotation.value = withTiming(expanded ? 180 : 0, { duration: 200 });
+    rotation.value = withTiming(expanded ? 180 : 0, { duration: motion.fast });
   }, [expanded, rotation]);
 
   const style = useAnimatedStyle(() => ({

@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Text } from './Text';
-import { colors, radius, spacing, shadow } from '@/theme';
+import { colors, radius, spacing, shadow, motion } from '@/theme';
 
 type Variant = 'gold' | 'primary' | 'ghost' | 'outline' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -81,13 +81,13 @@ export function Button({
       disabled={disabled || loading}
       onPressIn={(e) => {
         scale.value = withSpring(0.96, { stiffness: 320, damping: 18 });
-        glow.value = withTiming(1, { duration: 160 });
+        glow.value = withTiming(1, { duration: motion.fast });
         if (haptic) Haptics.selectionAsync();
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
         scale.value = withSpring(1, { stiffness: 320, damping: 18 });
-        glow.value = withTiming(0, { duration: 220 });
+        glow.value = withTiming(0, { duration: motion.base });
         onPressOut?.(e);
       }}
       onPress={onPress}

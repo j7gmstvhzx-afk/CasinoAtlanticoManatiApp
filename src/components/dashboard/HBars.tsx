@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
-import { C } from './shared';
+import { motion } from '@/theme';
+import { C, useResponsive } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 
 export type HBarItem = {
@@ -31,7 +32,7 @@ function AnimatedFill({ pct, color, colorTo, delay }: { pct: number; color: stri
   const mountDelay = useRef(delay).current;
 
   useEffect(() => {
-    width.value = withDelay(mountDelay, withTiming(pct, { duration: 360 }));
+    width.value = withDelay(mountDelay, withTiming(pct, { duration: motion.slow }));
   }, [pct, mountDelay, width]);
 
   const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
@@ -49,9 +50,9 @@ function AnimatedFill({ pct, color, colorTo, delay }: { pct: number; color: stri
 }
 
 export function HBars({ data, barColor = C.navy, onPress }: Props) {
-  const { width } = useWindowDimensions();
-  const labelW = width >= 1024 ? 180 : width >= 640 ? 130 : 96;
-  const valueW = width >= 640 ? 90 : 72;
+  const { isDesktop, isPhone } = useResponsive();
+  const labelW = isDesktop ? 180 : isPhone ? 96 : 130;
+  const valueW = isPhone ? 72 : 90;
   const max = data.reduce((m, d) => Math.max(m, d.value), 0) || 1;
 
   return (

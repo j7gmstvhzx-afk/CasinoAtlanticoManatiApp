@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, money } from './shared';
+import { C, money, useResponsive } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { FLOOR_LAYOUT, FLOOR_COLUMNS } from '@/data/floorLayout';
 import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
@@ -60,8 +60,8 @@ function bankDelta2025(g: BankGroup, metric: Metric): number | null {
 export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [mode, setMode] = useState<HeatMode>('perf');
-  const { width } = useWindowDimensions();
-  const isWide = width >= 640;
+  const { isPhone } = useResponsive();
+  const isWide = !isPhone;
 
   const byBankNum = useMemo(() => new Map(groups.map(g => [g.bankNum, g])), [groups]);
 
@@ -125,6 +125,8 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
           style={[styles.modeBtn, mode === 'perf' && styles.modeBtnActive]}
           onPress={() => setMode('perf')}
           hoverScale={1.03}
+          accessibilityRole="button"
+          accessibilityState={{ selected: mode === 'perf' }}
         >
           <Text style={[styles.modeBtnText, mode === 'perf' && styles.modeBtnTextActive]}>Rendimiento actual</Text>
         </Pressable>
@@ -132,6 +134,8 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
           style={[styles.modeBtn, mode === 'delta' && styles.modeBtnActive]}
           onPress={() => setMode('delta')}
           hoverScale={1.03}
+          accessibilityRole="button"
+          accessibilityState={{ selected: mode === 'delta' }}
         >
           <Text style={[styles.modeBtnText, mode === 'delta' && styles.modeBtnTextActive]}>Δ vs 2025</Text>
         </Pressable>
@@ -174,6 +178,9 @@ export function FloorHeatmap({ groups, metric, onOpenBank }: Props) {
                     disabled={!group}
                     onPress={() => group && setSelected(isSel ? null : group.bank)}
                     hoverScale={group ? 1.05 : 1}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Banco ${String(cell.bank).padStart(2, '0')}${sub ? `, ${sub}` : ', sin datos'}`}
+                    accessibilityState={{ selected: isSel, disabled: !group }}
                   >
                     <Text style={[styles.cellBank, noData && styles.cellBankNoData]}>
                       {String(cell.bank).padStart(2, '0')}
@@ -318,7 +325,7 @@ const styles = StyleSheet.create({
   cellBank: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#3f4d63',
+    color: C.navy,
     letterSpacing: -0.3,
   },
   cellBankNoData: {
@@ -327,7 +334,7 @@ const styles = StyleSheet.create({
   cellCount: {
     fontSize: 9,
     fontWeight: '600',
-    color: 'rgba(63,77,99,0.75)',
+    color: C.navy + 'BF',
   },
 
   legend: {

@@ -3,17 +3,18 @@ import {
   KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Switch, TextInput, View,
 } from 'react-native';
-import { Text } from '@/components/ui';
-import { spacing, radius } from '@/theme';
+import { Text, Button } from '@/components/ui';
+import { colors, palette, spacing, radius } from '@/theme';
 import { useSlotFloorStore } from '@/store/useSlotFloorStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { SlotMachine, SlotManufacturer, SlotMachineType } from '@/types/domain';
 
-const NAVY   = '#1a2332';
-const GOLD   = '#d4a574';
-const TEAL   = '#2a9d8f';
-const BORDER = '#e2e8f0';
-const BG     = '#f8f9fa';
+// Local aliases for readability below — sourced from the shared theme so this
+// sheet stays in sync with the rest of the app's color tokens.
+const NAVY   = colors.text.primary;
+const TEAL   = palette.teal;
+const BORDER = colors.border.default;
+const BG     = colors.bg.base;
 
 const MANUFACTURERS: SlotManufacturer[] = [
   'Light & Wonder', 'Aristocrat', 'Konami', 'Ainsworth', 'IGT', 'WMS', 'Everi',
@@ -152,13 +153,19 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Juego */}
             <FieldLabel>Juego</FieldLabel>
-            <TextInput style={s.input} value={draft.game} onChangeText={v => set('game', v)} placeholderTextColor="#94a3b8" editable={isAdmin} />
+            <TextInput style={s.input} value={draft.game} onChangeText={v => set('game', v)} placeholderTextColor={colors.text.muted} editable={isAdmin} />
 
             {/* Fabricante */}
             <FieldLabel>Fabricante</FieldLabel>
             <View style={s.chips}>
               {MANUFACTURERS.map(mfr => (
-                <Pressable key={mfr} style={[s.chip, draft.manufacturer === mfr && s.chipActive]} onPress={() => isAdmin && set('manufacturer', mfr)}>
+                <Pressable
+                  key={mfr}
+                  style={[s.chip, draft.manufacturer === mfr && s.chipActive]}
+                  onPress={() => isAdmin && set('manufacturer', mfr)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: draft.manufacturer === mfr, disabled: !isAdmin }}
+                >
                   <Text style={[s.chipText, draft.manufacturer === mfr && s.chipTextActive]}>{mfr.replace('Light & Wonder', 'L&W')}</Text>
                 </Pressable>
               ))}
@@ -168,7 +175,13 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
             <FieldLabel>Tipo</FieldLabel>
             <View style={s.chips}>
               {TYPES.map(t => (
-                <Pressable key={t} style={[s.chip, s.chipHalf, draft.type === t && s.chipActive]} onPress={() => isAdmin && set('type', t)}>
+                <Pressable
+                  key={t}
+                  style={[s.chip, s.chipHalf, draft.type === t && s.chipActive]}
+                  onPress={() => isAdmin && set('type', t)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: draft.type === t, disabled: !isAdmin }}
+                >
                   <Text style={[s.chipText, draft.type === t && s.chipTextActive]}>{t}</Text>
                 </Pressable>
               ))}
@@ -178,7 +191,13 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
             <FieldLabel>Denominación</FieldLabel>
             <View style={s.chips}>
               {DENOMS.map(d => (
-                <Pressable key={d.value} style={[s.chip, s.chipHalf, draft.denomination === d.value && s.chipActive]} onPress={() => isAdmin && set('denomination', d.value)}>
+                <Pressable
+                  key={d.value}
+                  style={[s.chip, s.chipHalf, draft.denomination === d.value && s.chipActive]}
+                  onPress={() => isAdmin && set('denomination', d.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: draft.denomination === d.value, disabled: !isAdmin }}
+                >
                   <Text style={[s.chipText, draft.denomination === d.value && s.chipTextActive]}>{d.label}</Text>
                 </Pressable>
               ))}
@@ -186,29 +205,29 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
 
             {/* Min Bet */}
             <FieldLabel>Apuesta Mínima ($)</FieldLabel>
-            <TextInput style={s.input} value={draft.minBet} onChangeText={v => set('minBet', v)} keyboardType="decimal-pad" placeholder="0.75" placeholderTextColor="#94a3b8" editable={isAdmin} />
+            <TextInput style={s.input} value={draft.minBet} onChangeText={v => set('minBet', v)} keyboardType="decimal-pad" placeholder="0.75" placeholderTextColor={colors.text.muted} editable={isAdmin} />
 
             {/* Max Bets */}
-            {showMax01 && (<><FieldLabel>Max Bet @ 1¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet01} onChangeText={v => set('maxBet01', v)} keyboardType="decimal-pad" placeholder="7.50" placeholderTextColor="#94a3b8" editable={isAdmin} /></>)}
-            {showMax02 && (<><FieldLabel>Max Bet @ 2¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet02} onChangeText={v => set('maxBet02', v)} keyboardType="decimal-pad" placeholder="15.00" placeholderTextColor="#94a3b8" editable={isAdmin} /></>)}
-            {showMax05 && (<><FieldLabel>Max Bet @ 5¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet05} onChangeText={v => set('maxBet05', v)} keyboardType="decimal-pad" placeholder="37.50" placeholderTextColor="#94a3b8" editable={isAdmin} /></>)}
-            {showMax10 && (<><FieldLabel>Max Bet @ 10¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet10} onChangeText={v => set('maxBet10', v)} keyboardType="decimal-pad" placeholder="75.00" placeholderTextColor="#94a3b8" editable={isAdmin} /></>)}
+            {showMax01 && (<><FieldLabel>Max Bet @ 1¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet01} onChangeText={v => set('maxBet01', v)} keyboardType="decimal-pad" placeholder="7.50" placeholderTextColor={colors.text.muted} editable={isAdmin} /></>)}
+            {showMax02 && (<><FieldLabel>Max Bet @ 2¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet02} onChangeText={v => set('maxBet02', v)} keyboardType="decimal-pad" placeholder="15.00" placeholderTextColor={colors.text.muted} editable={isAdmin} /></>)}
+            {showMax05 && (<><FieldLabel>Max Bet @ 5¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet05} onChangeText={v => set('maxBet05', v)} keyboardType="decimal-pad" placeholder="37.50" placeholderTextColor={colors.text.muted} editable={isAdmin} /></>)}
+            {showMax10 && (<><FieldLabel>Max Bet @ 10¢ ($)</FieldLabel><TextInput style={s.input} value={draft.maxBet10} onChangeText={v => set('maxBet10', v)} keyboardType="decimal-pad" placeholder="75.00" placeholderTextColor={colors.text.muted} editable={isAdmin} /></>)}
 
             {/* Avg Coin-In / Avg Win */}
             <View style={s.rowPair}>
               <View style={s.halfField}>
                 <FieldLabel>Avg Coin-In ($)</FieldLabel>
-                <TextInput style={s.input} value={draft.avgCoinIn} onChangeText={v => set('avgCoinIn', v)} keyboardType="decimal-pad" placeholder="3,500.00" placeholderTextColor="#94a3b8" editable={isAdmin} />
+                <TextInput style={s.input} value={draft.avgCoinIn} onChangeText={v => set('avgCoinIn', v)} keyboardType="decimal-pad" placeholder="3,500.00" placeholderTextColor={colors.text.muted} editable={isAdmin} />
               </View>
               <View style={s.halfField}>
                 <FieldLabel>Avg Win ($)</FieldLabel>
-                <TextInput style={s.input} value={draft.avgWin} onChangeText={v => set('avgWin', v)} keyboardType="decimal-pad" placeholder="350.00" placeholderTextColor="#94a3b8" editable={isAdmin} />
+                <TextInput style={s.input} value={draft.avgWin} onChangeText={v => set('avgWin', v)} keyboardType="decimal-pad" placeholder="350.00" placeholderTextColor={colors.text.muted} editable={isAdmin} />
               </View>
             </View>
 
             {/* Period label */}
             <FieldLabel>Etiqueta de Período</FieldLabel>
-            <TextInput style={s.input} value={draft.period} onChangeText={v => set('period', v)} placeholder="ej. Q1 2025, Temporada Alta" placeholderTextColor="#94a3b8" editable={isAdmin} />
+            <TextInput style={s.input} value={draft.period} onChangeText={v => set('period', v)} placeholder="ej. Q1 2025, Temporada Alta" placeholderTextColor={colors.text.muted} editable={isAdmin} />
 
             {/* Period start / end */}
             <View style={s.rowPair}>
@@ -227,7 +246,7 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
                 value={draft.active}
                 onValueChange={v => { if (isAdmin) set('active', v); }}
                 trackColor={{ false: BORDER, true: TEAL + 'AA' }}
-                thumbColor={draft.active ? TEAL : '#94a3b8'}
+                thumbColor={draft.active ? TEAL : colors.text.muted}
                 disabled={!isAdmin}
               />
             </View>
@@ -237,13 +256,9 @@ export function MachineEditSheet({ machine, visible, onClose }: Props) {
 
           {/* Buttons */}
           <View style={s.btns}>
-            <Pressable style={s.cancelBtn} onPress={onClose}>
-              <Text style={s.cancelBtnText}>{isAdmin ? 'Cancelar' : 'Cerrar'}</Text>
-            </Pressable>
+            <Button label={isAdmin ? 'Cancelar' : 'Cerrar'} variant="outline" onPress={onClose} style={{ flex: 1 }} />
             {isAdmin && (
-              <Pressable style={s.saveBtn} onPress={handleSave}>
-                <Text style={s.saveBtnText}>Guardar</Text>
-              </Pressable>
+              <Button label="Guardar" variant="primary" onPress={handleSave} style={{ flex: 2, backgroundColor: NAVY }} />
             )}
           </View>
         </View>
@@ -300,7 +315,7 @@ function DateField({ label, value, onChange, editable }: DateFieldProps) {
           value={value}
           onChangeText={v => onChange(maskDateInput(v))}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={colors.text.muted}
           editable={editable}
           keyboardType="number-pad"
           maxLength={10}
@@ -334,7 +349,7 @@ const s = StyleSheet.create({
     alignItems: 'flex-start', marginBottom: spacing.md,
   },
   sheetTitle:    { fontSize: 18, fontWeight: '700', color: NAVY },
-  sheetSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  sheetSubtitle: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
   viewerBadge: {
     backgroundColor: '#fef9c3', borderRadius: radius.pill,
     paddingHorizontal: spacing.sm, paddingVertical: 3,
@@ -343,7 +358,7 @@ const s = StyleSheet.create({
   viewerBadgeText: { fontSize: 10, fontWeight: '700', color: '#92400e', letterSpacing: 0.5 },
   scroll:     { marginTop: 4 },
   fieldLabel: {
-    fontSize: 10, fontWeight: '700', color: '#94a3b8',
+    fontSize: 10, fontWeight: '700', color: colors.text.muted,
     letterSpacing: 0.8, marginTop: spacing.md, marginBottom: 6,
   },
   input: {
@@ -355,12 +370,12 @@ const s = StyleSheet.create({
   chips:        { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderRadius: radius.pill, backgroundColor: '#f8f9fa',
+    borderRadius: radius.pill, backgroundColor: BG,
     borderWidth: 1, borderColor: BORDER,
   },
   chipHalf:       { flex: 1, alignItems: 'center' },
   chipActive:     { backgroundColor: '#f0faf9', borderColor: 'rgba(42,157,143,0.50)' },
-  chipText:       { fontSize: 12, fontWeight: '500', color: '#64748b' },
+  chipText:       { fontSize: 12, fontWeight: '500', color: colors.text.secondary },
   chipTextActive: { color: TEAL, fontWeight: '700' },
   rowPair:        { flexDirection: 'row', gap: spacing.md },
   halfField:      { flex: 1 },
@@ -371,14 +386,4 @@ const s = StyleSheet.create({
   },
   toggleLabel:    { fontSize: 15, fontWeight: '600', color: NAVY },
   btns:           { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.lg },
-  cancelBtn: {
-    flex: 1, padding: spacing.md, borderRadius: radius.md,
-    backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: BORDER, alignItems: 'center',
-  },
-  cancelBtnText: { fontSize: 15, fontWeight: '600', color: '#64748b' },
-  saveBtn: {
-    flex: 2, padding: spacing.md, borderRadius: radius.md,
-    backgroundColor: NAVY, alignItems: 'center',
-  },
-  saveBtnText:    { fontSize: 15, fontWeight: '600', color: '#ffffff' },
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
+import { motion } from '@/theme';
 import { C } from './shared';
 import { AnimatedPressable } from './AnimatedPressable';
 import { ChartTooltip } from './ChartTooltip';
@@ -30,7 +31,7 @@ function AnimatedSegment({ heightPct, color, dimmed, delay }: { heightPct: numbe
   const mountDelay = useRef(delay).current;
 
   useEffect(() => {
-    h.value = withDelay(mountDelay, withTiming(heightPct, { duration: 360 }));
+    h.value = withDelay(mountDelay, withTiming(heightPct, { duration: motion.slow }));
   }, [heightPct, mountDelay, h]);
 
   const animated = useAnimatedStyle(() => ({ height: `${h.value}%` }));
@@ -66,6 +67,8 @@ export function ChangesTimeline({ buckets, colors, labels, types, activeType, he
               onPress={() => setPinned(p => (p === i ? null : i))}
               onHoverIn={() => setHovered(i)}
               onHoverOut={() => setHovered(h => (h === i ? null : h))}
+              accessibilityRole="button"
+              accessibilityLabel={`${b.date}, ${total} cambios`}
             >
               {isActive && (
                 <ChartTooltip

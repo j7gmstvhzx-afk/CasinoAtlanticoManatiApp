@@ -80,7 +80,15 @@ export function MachineRow({ machine: m, onEdit }: Props) {
 
       {/* Edit button */}
       {onEdit && (
-        <Pressable style={styles.editBtn} onPress={() => onEdit(m)} hitSlop={8} hoverScale={1.12} scaleTo={0.9}>
+        <Pressable
+          style={styles.editBtn}
+          onPress={() => onEdit(m)}
+          hitSlop={8}
+          hoverScale={1.12}
+          scaleTo={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`Editar máquina ${m.id}`}
+        >
           <Ionicons name="pencil" size={13} color={C.navy3} />
         </Pressable>
       )}

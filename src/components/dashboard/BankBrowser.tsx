@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
-import { C, money, positionOf } from './shared';
+import { C, money, positionOf, useResponsive } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { AnimatedChevron } from './AnimatedChevron';
 import { MachineRow } from './MachineRow';
 import type { BankGroup } from '@/store/useSlotFloorStore';
 import type { SlotMachine } from '@/types/domain';
+
+// Rank badge colors (top-3 / bottom-3 banks) — named so the 3 repeated
+// literals below stay in sync with each other.
+const RANK_GOOD        = '#b8863f';
+const RANK_GOOD_BORDER = '#f0d090';
+const RANK_BAD         = '#c0392b';
+const RANK_BAD_BORDER  = '#f5c6c6';
 
 type Props = {
   groups: BankGroup[];
@@ -22,9 +29,9 @@ type Props = {
 type RankInfo = { label: string; color: string; border: string };
 
 function rankInfo(rank: number, total: number): RankInfo | null {
-  if (rank === 1) return { label: '🥇 #1', color: '#b8863f', border: '#f0d090' };
-  if (rank <= 3)  return { label: `#${rank} Mejor`, color: '#b8863f', border: '#f0d090' };
-  if (rank >= total - 2) return { label: `#${total - rank + 1} Peor`, color: '#c0392b', border: '#f5c6c6' };
+  if (rank === 1) return { label: '🥇 #1', color: RANK_GOOD, border: RANK_GOOD_BORDER };
+  if (rank <= 3)  return { label: `#${rank} Mejor`, color: RANK_GOOD, border: RANK_GOOD_BORDER };
+  if (rank >= total - 2) return { label: `#${total - rank + 1} Peor`, color: RANK_BAD, border: RANK_BAD_BORDER };
   return null;
 }
 
@@ -42,8 +49,8 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
   const [expanded, setExpanded] = useState(false);
   const ri   = rankInfo(rank, total);
   const bank = group.bank.padStart(2, '0');
-  const { width } = useWindowDimensions();
-  const isWide = width >= 640;
+  const { isPhone } = useResponsive();
+  const isWide = !isPhone;
 
   // Drill-down target: open while focused, close again once focus moves to
   // another bank (otherwise a card stays force-expanded for the rest of the
@@ -66,6 +73,9 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
         onPress={() => setExpanded(e => !e)}
         android_ripple={{ color: '#f0f0f0' }}
         scaleTo={0.995}
+        accessibilityRole="button"
+        accessibilityLabel={`Banco ${bank}`}
+        accessibilityState={{ expanded }}
       >
         {/* Left: bank number badge */}
         <View style={[styles.bankBadge, rank <= 3 && styles.bankBadgeTop]}>
@@ -94,7 +104,7 @@ function BankCard({ group, rank, total, rankMetric, onEdit, focused, onLayoutY }
             </View>
           )}
           <Text style={styles.metaLabel}>Total CI: {money(group.totalCoinIn, 0)} · Win: {money(group.totalWin, 0)}</Text>
-          <Text style={[styles.metaLabel, { color: '#b8863f' }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
+          <Text style={[styles.metaLabel, { color: RANK_GOOD }]}>WWCJPR: {money(group.avgWin * 0.50, 0)} /máq</Text>
           <AnimatedChevron expanded={expanded} size={16} color={C.muted} />
         </View>
       </Pressable>
@@ -156,7 +166,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardTop: {
-    borderColor: '#f0d090',
+    borderColor: RANK_GOOD_BORDER,
     shadowOpacity: 0.12,
   },
   cardFocused: {

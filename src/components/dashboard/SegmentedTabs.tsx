@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from '@/components/ui';
+import { motion } from '@/theme';
 import { C } from './shared';
 import { AnimatedPressable } from './AnimatedPressable';
 
@@ -29,10 +30,10 @@ export function SegmentedTabs({ tabs, active, onChange, gutter = 16 }: Props) {
       if (first) {
         indicatorX.value = x;
         indicatorW.value = width;
-        indicatorOpacity.value = withTiming(1, { duration: 160 });
+        indicatorOpacity.value = withTiming(1, { duration: motion.fast });
       } else {
-        indicatorX.value = withTiming(x, { duration: 220 });
-        indicatorW.value = withTiming(width, { duration: 220 });
+        indicatorX.value = withTiming(x, { duration: motion.base });
+        indicatorW.value = withTiming(width, { duration: motion.base });
       }
     }
   };
@@ -40,8 +41,8 @@ export function SegmentedTabs({ tabs, active, onChange, gutter = 16 }: Props) {
   useEffect(() => {
     const l = layouts.current[active];
     if (l) {
-      indicatorX.value = withTiming(l.x, { duration: 240 });
-      indicatorW.value = withTiming(l.width, { duration: 240 });
+      indicatorX.value = withTiming(l.x, { duration: motion.base });
+      indicatorW.value = withTiming(l.width, { duration: motion.base });
     }
   }, [active, indicatorX, indicatorW]);
 
@@ -68,6 +69,9 @@ export function SegmentedTabs({ tabs, active, onChange, gutter = 16 }: Props) {
               hoverScale={1.04}
               onPress={() => onChange(tab.key)}
               onLayout={e => measure(tab.key, e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
+              accessibilityRole="tab"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.label, isActive && styles.labelActive]}>
                 {tab.label}

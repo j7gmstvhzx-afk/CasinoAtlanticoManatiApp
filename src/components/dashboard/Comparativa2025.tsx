@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, money, mfrColor, shortMfr, bankOf, positionOf } from './shared';
+import { C, money, mfrColor, shortMfr, bankOf, positionOf, useResponsive } from './shared';
 import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import { AnimatedChevron } from './AnimatedChevron';
 import { DeltaBar } from './DeltaBar';
@@ -182,8 +182,8 @@ function MiniDelta({ label, then, now, color }: { label: string; then: number; n
 
 function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric }) {
   const [expanded, setExpanded] = useState(false);
-  const { width } = useWindowDimensions();
-  const isWide = width >= 720;
+  const { isPhone } = useResponsive();
+  const isWide = !isPhone;
   const bank = group.bank.padStart(2, '0');
 
   return (
@@ -193,6 +193,9 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
         onPress={() => setExpanded(e => !e)}
         android_ripple={{ color: '#f0f0f0' }}
         scaleTo={0.995}
+        accessibilityRole="button"
+        accessibilityLabel={`Banco ${bank}`}
+        accessibilityState={{ expanded }}
       >
         <View style={styles.bankBadge}>
           <Text style={styles.bankNum}>Banco</Text>
@@ -346,6 +349,8 @@ export function Comparativa2025({ machines, metric }: Props) {
               style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
               onPress={() => setFilter(f.id)}
               hoverScale={1.04}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === f.id }}
             >
               <Text style={[styles.filterPillText, filter === f.id && styles.filterPillTextActive]}>{f.label}</Text>
             </Pressable>
@@ -355,6 +360,8 @@ export function Comparativa2025({ machines, metric }: Props) {
           style={[styles.sortBtn, sortWorst && styles.sortBtnActive]}
           onPress={() => setSortWorst(s => !s)}
           hoverScale={1.04}
+          accessibilityRole="button"
+          accessibilityState={{ selected: sortWorst }}
         >
           <Ionicons name="swap-vertical" size={13} color={sortWorst ? '#fff' : C.navy3} />
           <Text style={[styles.sortBtnText, sortWorst && { color: '#fff' }]}>

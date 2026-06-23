@@ -20,6 +20,8 @@ export function Skeleton({ width = '100%', height = 16, style, rounded = 'sm' }:
   const opacity = useSharedValue(0.4);
 
   useEffect(() => {
+    // Looping shimmer, not a discrete transition — intentionally outside the
+    // `theme.motion` ladder (fast/base/slow/page), which is tuned for one-shot moves.
     opacity.value = withRepeat(
       withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
       -1,

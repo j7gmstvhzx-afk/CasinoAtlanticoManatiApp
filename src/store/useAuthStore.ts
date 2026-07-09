@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { showErrorAlert } from '@/lib/alert';
 
 export interface UserProfile {
   id:        string;
@@ -43,8 +44,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   async signOut() {
-    await supabase.auth.signOut();
-    set({ session: null, profile: null });
+    try {
+      // scope: 'local' clears the on-device session even if the network revoke
+      // call cannot reach Supabase (flaky floor/kiosk connectivity).
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (e) {
+      showErrorAlert('No se pudo contactar el servidor al cerrar sesión; la sesión local se cerró de todos modos.');
+    } finally {
+      // Always clear local auth state so a failed revoke never leaves the
+      // previous user authenticated on a shared device.
+      set({ session: null, profile: null });
+    }
   },
 }));
 

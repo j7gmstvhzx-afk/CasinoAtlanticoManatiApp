@@ -9,8 +9,10 @@ web-build/
 *.mobileprovision
 *.orig.*
 .DS_Store
-.env
-.env.local
+# Ignore every dotenv variant (.env.production/.env.development hold DB
+# credentials for seed runs) but keep the committed placeholder template.
+.env*
+!.env.example
 .idea/
 .vscode/
 *.tsbuildinfo

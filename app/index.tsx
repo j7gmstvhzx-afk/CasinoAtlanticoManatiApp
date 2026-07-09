@@ -1440,13 +1440,16 @@ export default function DashboardScreen() {
   const explorerSearch    = useSlotFloorStore(s => s.explorerSearch);
   const setExplorerSearch = useSlotFloorStore(s => s.setExplorerSearch);
   const profile       = useAuthStore(s => s.profile);
+  const session       = useAuthStore(s => s.session);
   const signOut       = useAuthStore(s => s.signOut);
 
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const gutter    = isDesktop ? 32 : width >= 640 ? 24 : 16;
 
-  useEffect(() => { init(); }, [init]);
+  // Only fetch floor data once a session exists, so no anonymous query fires
+  // during the brief window before the unauthenticated redirect to /login.
+  useEffect(() => { if (session) init(); }, [init, session]);
 
   const periodLabel = useMemo(() => resolvePeriodLabel(machines), [machines]);
 

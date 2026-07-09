@@ -3,13 +3,23 @@ name: Run DB Migration
 on:
   workflow_dispatch:
 
+# Least-privilege: this job only reads the repo; it never needs write scope on
+# the GITHUB_TOKEN. It does hold high-privilege Supabase secrets, so it is
+# gated behind a protected GitHub Environment (configure required reviewers +
+# branch restriction under Settings → Environments → production).
+permissions:
+  contents: read
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to full commit SHAs so a moved tag can't inject code into a job
+      # that holds the Supabase management token. (v4.2.2 / v4.1.0)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
         with:
           node-version: '20'
 

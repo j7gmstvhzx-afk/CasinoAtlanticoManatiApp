@@ -50,5 +50,10 @@
     "dotenv": "^17.4.2",
     "typescript": "^5.3.3"
   },
+  "overrides": {
+    "dompurify": ">=3.4.11",
+    "form-data": ">=3.0.5",
+    "undici": ">=6.27.0"
+  },
   "private": true
 }

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { C, money, shortMfr, mfrColor } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
 import type { SlotMachine } from '@/types/domain';
 
 type Props = {
@@ -19,9 +20,28 @@ function MetricCol({ label, value, color }: { label: string; value: string; colo
   );
 }
 
+// Shows the editable bet range as one unit so changes to either bound are
+// immediately visible in the same spot.
+function BetRangeCol({ minBet, maxBet }: { minBet: number; maxBet: number | null }) {
+  return (
+    <View style={styles.metricCol}>
+      <Text style={styles.metricLabel}>MIN / MAX BET</Text>
+      <View style={styles.betRangeRow}>
+        <Text style={[styles.metricValue, styles.betRangeValue, { color: C.navy3 }]}>{money(minBet, 2)}</Text>
+        <Text style={styles.betRangeSep}>–</Text>
+        <Text style={[styles.metricValue, styles.betRangeValue, { color: C.navy }]}>{maxBet != null ? money(maxBet, 2) : '—'}</Text>
+      </View>
+    </View>
+  );
+}
+
 export function MachineRow({ machine: m, onEdit }: Props) {
   const mfrBg  = mfrColor(m.manufacturer, 0);
-  const maxBet = m.maxBet01 ?? m.maxBet05 ?? m.maxBet02 ?? m.maxBet10;
+  // Multi-denomination machines have a separate max bet per denomination tier;
+  // the true machine max is whichever tier's max is highest, not the first
+  // tier that happens to be set.
+  const hasMaxBet = m.maxBet01 != null || m.maxBet02 != null || m.maxBet05 != null || m.maxBet10 != null;
+  const maxBet = hasMaxBet ? Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0) : null;
   // WWCJPR = Win Without Comisión de Juegos de PR (Avg Win after deducting 50% CJPR fee)
   const wwcjpr = m.avgWin != null ? m.avgWin * 0.50 : null;
 
@@ -55,14 +75,20 @@ export function MachineRow({ machine: m, onEdit }: Props) {
           ? <MetricCol label="WWCJPR" value={money(wwcjpr, 0)} color="#b8863f" />
           : <View style={styles.metricEmpty} />}
         <View style={styles.divider} />
-        {maxBet != null
-          ? <MetricCol label="MAX BET" value={money(maxBet, 2)} color={C.navy} />
-          : <View style={styles.metricEmpty} />}
+        <BetRangeCol minBet={m.minBet} maxBet={maxBet} />
       </View>
 
       {/* Edit button */}
       {onEdit && (
-        <Pressable style={styles.editBtn} onPress={() => onEdit(m)} hitSlop={8}>
+        <Pressable
+          style={styles.editBtn}
+          onPress={() => onEdit(m)}
+          hitSlop={8}
+          hoverScale={1.12}
+          scaleTo={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`Editar máquina ${m.id}`}
+        >
           <Ionicons name="pencil" size={13} color={C.navy3} />
         </Pressable>
       )}
@@ -77,7 +103,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
-    minHeight: 58,
+    minHeight: 46,
     overflow: 'hidden',
   },
 
@@ -87,19 +113,19 @@ const styles = StyleSheet.create({
   },
 
   idCol: {
-    width: 54,
-    paddingVertical: 10,
-    paddingLeft: 10,
-    gap: 3,
+    width: 50,
+    paddingVertical: 6,
+    paddingLeft: 8,
+    gap: 1,
   },
   machineId: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: C.navy,
     letterSpacing: -0.3,
   },
   location: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: C.gold,
     letterSpacing: 0.3,
@@ -107,25 +133,25 @@ const styles = StyleSheet.create({
 
   gameCol: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    gap: 3,
   },
   game: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: C.text,
-    lineHeight: 17,
+    lineHeight: 15,
   },
   mfrPill: {
     alignSelf: 'flex-start',
     borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderWidth: 1,
   },
   mfrText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
@@ -137,51 +163,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: C.track,
     borderRadius: 8,
-    marginVertical: 8,
-    marginRight: 8,
-    paddingVertical: 7,
+    marginVertical: 5,
+    marginRight: 6,
+    paddingVertical: 4,
     paddingHorizontal: 4,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.border,
   },
   divider: {
     width: StyleSheet.hairlineWidth,
-    height: 26,
+    height: 22,
     backgroundColor: '#d0d8e4',
     marginHorizontal: 2,
   },
   metricCol: {
     alignItems: 'center',
-    paddingHorizontal: 9,
-    minWidth: 66,
+    paddingHorizontal: 8,
+    minWidth: 60,
   },
   metricEmpty: {
-    minWidth: 66,
-    paddingHorizontal: 9,
+    minWidth: 60,
+    paddingHorizontal: 8,
   },
   metricLabel: {
-    fontSize: 8,
+    fontSize: 7.5,
     fontWeight: '700',
     color: C.muted,
-    letterSpacing: 0.7,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   metricValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
+  betRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  betRangeValue: {
+    fontSize: 11,
+  },
+  betRangeSep: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.faint,
+  },
 
   editBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 7,
     backgroundColor: '#eef1f5',
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
 });

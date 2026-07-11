@@ -6,6 +6,11 @@ import {
 import { Redirect } from 'expo-router';
 import { Text } from '@/components/ui';
 import { useAuthStore } from '@/store/useAuthStore';
+import { palette } from '@/theme';
+
+const CHIP_BLUE      = palette.chipBlue;
+const CHIP_BLUE_DARK = palette.chipBlueDark;
+const CHIP_BLUE_MID  = palette.chipBlueMid;
 
 const NAVY   = '#1a2332';
 const NAVY2  = '#243042';
@@ -16,11 +21,6 @@ const OFFWHITE = '#f7f9fc';
 const DARK_TEXT = '#1a2332';
 const MUTED_TEXT = '#6b7a8d';
 const BORDER = '#dde3ec';
-
-// Casino Atlántico Manatí — brand blue from the official chip logo
-const CHIP_BLUE      = '#2457b5';
-const CHIP_BLUE_DARK = '#1a3e96';
-const CHIP_BLUE_MID  = '#3568c8';
 
 const FEATURES = [
   { icon: '📊', text: '285 máquinas en 44 bancos monitoreadas en tiempo real' },

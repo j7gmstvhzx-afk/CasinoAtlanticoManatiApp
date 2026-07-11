@@ -1,22 +1,39 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView,
-  StyleSheet, Switch, Text as RNText, View,
+  ScrollView,
+  StyleSheet, Switch, Text as RNText, TextInput, View,
   useWindowDimensions,
 } from 'react-native';
+import Animated, {
+  FadeIn, FadeInLeft, FadeInRight, FadeInDown,
+  useSharedValue, useAnimatedStyle, withDelay, withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSlotFloorStore } from '@/store/useSlotFloorStore';
+import { useSlotFloorStore, useActiveMachines } from '@/store/useSlotFloorStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { Skeleton } from '@/components/ui';
 import { MachineEditSheet } from '@/components/slotfloor/MachineEditSheet';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { HBars, type HBarItem } from '@/components/dashboard/HBars';
 import { Donut, type DonutItem } from '@/components/dashboard/Donut';
 import { SegmentedTabs } from '@/components/dashboard/SegmentedTabs';
+import { AnimatedPressable as Pressable } from '@/components/dashboard/AnimatedPressable';
+import { AnimatedChevron } from '@/components/dashboard/AnimatedChevron';
 import { BankBrowser } from '@/components/dashboard/BankBrowser';
 import { Comparativa2025 } from '@/components/dashboard/Comparativa2025';
+import { FloorHeatmap } from '@/components/dashboard/FloorHeatmap';
 import { MachineRow } from '@/components/dashboard/MachineRow';
-import { C, card, money, mfrColor, shortMfr } from '@/components/dashboard/shared';
+import { Histogram } from '@/components/dashboard/Histogram';
+import { ScatterPlot, quadrantOf, QUADRANT_META, type ScatterPoint } from '@/components/dashboard/ScatterPlot';
+import { ParetoChart } from '@/components/dashboard/ParetoChart';
+import { BoxPlotRows, type BoxPlotGroup } from '@/components/dashboard/BoxPlotRows';
+import { ChangesTimeline, type TimelineBucket } from '@/components/dashboard/ChangesTimeline';
+import { C, card, money, mfrColor, shortMfr, bankOf, TONES, type Tone } from '@/components/dashboard/shared';
+import { typography } from '@/theme';
+import { describe } from '@/lib/stats';
+import { SLOT_FLOOR_2025 } from '@/data/slotFloor2025';
 import { generateFloorReport, resolvePeriodLabel } from '@/lib/reportGenerator';
 import type { SlotMachine, MachineChange } from '@/types/domain';
 
@@ -24,6 +41,8 @@ type Metric = 'avgCoinIn' | 'avgWin';
 
 const TABS = [
   { key: 'resumen',      label: 'Resumen' },
+  { key: 'plano',        label: 'Plano' },
+  { key: 'analisis',     label: 'Análisis' },
   { key: 'bancos',       label: 'Bancos' },
   { key: 'comparativa',  label: 'Comparativa vs 2025' },
   { key: 'fabricantes',  label: 'Fabricantes' },
@@ -37,18 +56,108 @@ const CHANGE_LABELS: Record<string, string> = {
   cambio_juego: 'Cambio de Juego',
   removida:     'Removida',
 };
-const CHANGE_COLORS: Record<string, string> = {
-  compra:       C.green,
-  reubicacion:  C.gold,
-  cambio_juego: C.navy3,
-  removida:     C.red,
+const CHANGE_TONE: Record<string, Tone> = {
+  compra:       'green',
+  reubicacion:  'gold',
+  cambio_juego: 'teal',
+  removida:     'red',
 };
+const CHANGE_COLORS: Record<string, string> = {
+  compra:       TONES.green.fg,
+  reubicacion:  TONES.gold.fg,
+  cambio_juego: TONES.teal.fg,
+  removida:     TONES.red.fg,
+};
+
+// ── Floor health (Resumen hero card) ──────────────────────────────────────────
+//
+// Answers "¿cómo va el piso?" in one glance: score = % of comparable machines
+// (position has 2025 data AND current data exists) whose active-metric delta
+// vs 2025 is better than −15%. Alert banks = banks whose aggregate delta
+// dropped more than 20%.
+
+function computeFloorHealth(machines: SlotMachine[], metric: Metric) {
+  const pick = (m: { avgCoinIn?: number | null; avgWin?: number | null }) =>
+    metric === 'avgWin' ? m.avgWin : m.avgCoinIn;
+
+  let comparable = 0, healthy = 0, nowSum = 0, thenSum = 0;
+  const bankNow = new Map<string, number>();
+  const bankThen = new Map<string, number>();
+
+  for (const m of machines) {
+    const ref = SLOT_FLOOR_2025[m.location];
+    const now = pick(m), then = ref ? pick(ref) : null;
+    if (now == null || then == null) continue;
+    comparable++;
+    nowSum += now; thenSum += then;
+    if (then === 0 || (now - then) / then >= -0.15) healthy++;
+    const bank = bankOf(m.location);
+    bankNow.set(bank, (bankNow.get(bank) ?? 0) + now);
+    bankThen.set(bank, (bankThen.get(bank) ?? 0) + then);
+  }
+  if (comparable === 0) return null;
+
+  let alertBanks = 0;
+  for (const [bank, then] of bankThen) {
+    if (then > 0 && ((bankNow.get(bank) ?? 0) - then) / then < -0.20) alertBanks++;
+  }
+
+  return {
+    score: Math.round((healthy / comparable) * 100),
+    deltaPct: thenSum > 0 ? ((nowSum - thenSum) / thenSum) * 100 : 0,
+    alertBanks,
+    comparable,
+  };
+}
+
+function FloorHealthCard({ metric }: { metric: Metric }) {
+  const machines = useActiveMachines();
+  const health = useMemo(() => computeFloorHealth(machines, metric), [machines, metric]);
+  if (!health) return null;
+
+  const tone = health.score >= 90 ? '#34d399' : health.score >= 70 ? '#fbbf24' : '#f87171';
+  const ringColors = (health.score >= 90 ? ['#34d399', '#15803d'] : health.score >= 70 ? ['#fbbf24', '#b45309'] : ['#f87171', '#b91c1c']) as [string, string];
+  const statusLabel = health.score >= 90 ? 'Saludable' : health.score >= 70 ? 'Atención' : 'Crítico';
+  const deltaUp = health.deltaPct >= 0;
+
+  return (
+    <LinearGradient colors={['#1a2332', '#2d3e50', '#3a4f68']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.healthCard}>
+      <LinearGradient colors={ringColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.healthScoreBox}>
+        <RNText style={styles.healthScore}>{health.score}</RNText>
+        <RNText style={styles.healthScoreSub}>/100</RNText>
+      </LinearGradient>
+      <View style={styles.healthBody}>
+        <View style={styles.healthTitleRow}>
+          <RNText style={styles.healthTitle}>Salud del Piso</RNText>
+          <View style={[styles.healthStatusChip, { backgroundColor: tone + '22', borderColor: tone + '88' }]}>
+            <RNText style={[styles.healthStatusText, { color: tone }]}>{statusLabel}</RNText>
+          </View>
+        </View>
+        <RNText style={styles.healthDetail}>
+          <RNText style={{ color: deltaUp ? '#34d399' : '#f87171', fontWeight: '800' }}>
+            {deltaUp ? '↑' : '↓'} {Math.abs(health.deltaPct).toFixed(1)}%
+          </RNText>
+          {' '}vs 2025 ({metric === 'avgWin' ? 'Win' : 'Coin-In'})
+          {health.alertBanks > 0
+            ? <RNText style={{ color: '#f87171', fontWeight: '700' }}>  ·  ⚠ {health.alertBanks} {health.alertBanks === 1 ? 'banco' : 'bancos'} con caída &gt;20%</RNText>
+            : '  ·  sin bancos en alerta'}
+        </RNText>
+        <RNText style={styles.healthFootnote}>
+          % de máquinas comparables sin caída mayor a 15% · {health.comparable} máquinas con dato 2025
+        </RNText>
+      </View>
+    </LinearGradient>
+  );
+}
 
 // ── Section: Resumen ──────────────────────────────────────────────────────────
 
-function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+function ResumeSection({ metric, gutter, onOpenBank, onOpenMfr }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+  onOpenMfr: (mfr: string) => void;
+}) {
+  const machines = useActiveMachines();
   const floorStats  = useSlotFloorStore(s => s.floorStats);
   const getBankRanking = useSlotFloorStore(s => s.getBankRanking);
 
@@ -59,7 +168,7 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     for (const m of machines) map.set(m.manufacturer, (map.get(m.manufacturer) ?? 0) + 1);
     return Array.from(map.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([name, count], idx) => ({ label: shortMfr(name), value: count, color: mfrColor(name, idx) }));
+      .map(([name, count], idx) => ({ label: shortMfr(name), key: name, value: count, color: mfrColor(name, idx) }));
   }, [machines]);
 
   const bestBars: HBarItem[] = best.map(g => ({
@@ -67,14 +176,16 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
     label:   `Banco ${g.bank.padStart(2, '0')}`,
     value:   metric === 'avgWin' ? g.avgWin : g.avgCoinIn,
     display: money(metric === 'avgWin' ? g.avgWin : g.avgCoinIn, 0),
-    color:   C.green,
+    color:   '#34d399',
+    colorTo: '#15803d',
   }));
   const worstBars: HBarItem[] = worst.map(g => ({
     key:     g.bank,
     label:   `Banco ${g.bank.padStart(2, '0')}`,
     value:   metric === 'avgWin' ? g.avgWin : g.avgCoinIn,
     display: money(metric === 'avgWin' ? g.avgWin : g.avgCoinIn, 0),
-    color:   C.red,
+    color:   '#f87171',
+    colorTo: '#b91c1c',
   }));
 
   const winPctStr = floorStats.winPct.toFixed(1) + '%';
@@ -82,9 +193,12 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      {/* Floor health — the 5-second answer */}
+      <FloorHealthCard metric={metric} />
+
       {/* KPI grid — auto-reflows across screen width */}
       <View style={styles.kpiGrid}>
-        <StatCard label="Total Máquinas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
+        <StatCard label="Máquinas Activas"  value={String(floorStats.active)} icon="grid-outline"        tone="navy"  sub={`${bankCount} bancos en el piso de juego`} />
         <StatCard label="Avg Coin-In PD"  value={money(floorStats.avgCoinIn, 0)} icon="trending-up-outline" tone="teal"  sub="Promedio apostado por máquina al día" />
         <StatCard label="Avg Win PD"      value={money(floorStats.avgWin, 0)}    icon="cash-outline"        tone="green" sub="Ganancia del casino por máquina al día" />
         <StatCard label="Win %"           value={winPctStr} icon="pie-chart-outline"  tone="gold"  sub="Win ÷ Coin-In · retención del casino" />
@@ -100,24 +214,350 @@ function ResumeSection({ metric, gutter }: { metric: Metric; gutter: number }) {
       {/* Best 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Top 5 Mejores Bancos</RNText></View>
-        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
-        {bestBars.length ? <HBars data={bestBars} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'} · toca un banco para ver su detalle</RNText>
+        {bestBars.length ? <HBars data={bestBars} onPress={onOpenBank} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       {/* Worst 5 banks */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={[card.accent, { backgroundColor: C.red }]} /><RNText style={card.title}>Top 5 Peores Bancos</RNText></View>
-        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'}</RNText>
-        {worstBars.length ? <HBars data={worstBars} barColor={C.red} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        <RNText style={styles.chartContext}>Ordenado por {metric === 'avgWin' ? 'Avg Win PD — ganancia promedio del casino por máquina al día' : 'Avg Coin-In PD — promedio apostado por máquina al día'} · toca un banco para ver su detalle</RNText>
+        {worstBars.length ? <HBars data={worstBars} barColor={C.red} onPress={onOpenBank} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       {/* Manufacturer donut */}
       <View style={card.base}>
         <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Distribución por Fabricante</RNText></View>
-        {distData.length ? <Donut data={distData} /> : <RNText style={styles.empty}>Sin datos</RNText>}
+        {distData.length ? <Donut data={distData} onSlicePress={onOpenMfr} /> : <RNText style={styles.empty}>Sin datos</RNText>}
       </View>
 
       <RNText style={styles.footer}>Casino Atlántico Manatí · Operaciones de Piso</RNText>
+    </ScrollView>
+  );
+}
+
+// ── Section: Plano (floor heatmap) ────────────────────────────────────────────
+
+function PlanoSection({ metric, gutter, onOpenBank }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+}) {
+  const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
+  const machines      = useSlotFloorStore(s => s.machines);
+  const groups        = useMemo(() => getBankGroups(), [machines, getBankGroups]);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <RNText style={styles.sectionIntro}>
+        Mapa de calor del piso: cada celda es un banco, coloreado por su{' '}
+        <RNText style={{ fontWeight: '700' }}>{metric === 'avgWin' ? 'Avg Win PD' : 'Avg Coin-In PD'}</RNText>{' '}
+        en quintiles — de rojo (más bajo) a verde (más alto). Usa el interruptor Coin-In/Win
+        del encabezado para cambiar la métrica.
+      </RNText>
+      <FloorHeatmap groups={groups} metric={metric} onOpenBank={onOpenBank} />
+      <RNText style={styles.footer}>Casino Atlántico Manatí · Plano de rendimiento por banco</RNText>
+    </ScrollView>
+  );
+}
+
+// ── Section: Análisis (estadística descriptiva para decisiones) ──────────────
+
+type Finding = { icon: keyof typeof Ionicons.glyphMap; color: string; text: React.ReactNode };
+
+function AnChartCard({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) {
+  return (
+    <View style={card.base}>
+      <View style={card.titleRow}>
+        <View style={card.accent} />
+        <RNText style={card.title}>{title}</RNText>
+      </View>
+      {children}
+      {note ? <RNText style={styles.anChartNote}>{note}</RNText> : null}
+    </View>
+  );
+}
+
+function AnalisisSection({ metric, gutter, onOpenBank }: {
+  metric: Metric; gutter: number;
+  onOpenBank: (bank: string) => void;
+}) {
+  const machines = useActiveMachines();
+  const [selKey, setSelKey] = useState<string | null>(null);
+
+  const metricLabel = metric === 'avgWin' ? 'Avg Win PD' : 'Avg Coin-In PD';
+
+  const model = useMemo(() => {
+    // Machines with usable performance data for the active metric.
+    const withData = machines.filter(m => m.avgCoinIn != null && m.avgWin != null);
+    const pick = (m: SlotMachine) => (metric === 'avgWin' ? m.avgWin ?? 0 : m.avgCoinIn ?? 0);
+    const values = withData.map(pick);
+    const stats = describe(values);
+
+    // Scatter: volume (CI) vs hold (machine win%), split at the cloud means.
+    const points: ScatterPoint[] = withData
+      .filter(m => (m.avgCoinIn ?? 0) > 0)
+      .map(m => ({
+        key: m.id,
+        x: m.avgCoinIn ?? 0,
+        y: ((m.avgWin ?? 0) / (m.avgCoinIn ?? 1)) * 100,
+      }));
+    const xMid = points.length ? points.reduce((s, p) => s + p.x, 0) / points.length : 0;
+    const yMid = points.length ? points.reduce((s, p) => s + p.y, 0) / points.length : 0;
+    const quadCounts = { star: 0, volume: 0, hold: 0, low: 0 };
+    for (const p of points) quadCounts[quadrantOf(p, xMid, yMid)]++;
+
+    // Pareto: contribution of each bank to the floor total of the metric.
+    const bankTotals = new Map<string, number>();
+    for (const m of withData) {
+      const bank = bankOf(m.location);
+      bankTotals.set(bank, (bankTotals.get(bank) ?? 0) + pick(m));
+    }
+    const paretoItems = Array.from(bankTotals.entries()).map(([bank, value]) => ({
+      key: bank, label: bank, value,
+    }));
+    const sortedDesc = [...paretoItems].sort((a, b) => b.value - a.value);
+    const grandTotal = sortedDesc.reduce((s, i) => s + i.value, 0) || 1;
+    let acc = 0, coreCount = 0;
+    for (const item of sortedDesc) {
+      acc += item.value;
+      coreCount++;
+      if (acc / grandTotal > 0.8) break;
+    }
+
+    // Box plots: spread per manufacturer.
+    const byMfr = new Map<string, number[]>();
+    for (const m of withData) {
+      if (!byMfr.has(m.manufacturer)) byMfr.set(m.manufacturer, []);
+      byMfr.get(m.manufacturer)!.push(pick(m));
+    }
+    const boxGroups: BoxPlotGroup[] = Array.from(byMfr.entries()).map(([mfr, vals], i) => ({
+      key: mfr, label: shortMfr(mfr), color: mfrColor(mfr, i), values: vals,
+    }));
+    const mfrMedians = boxGroups
+      .map(g => ({ mfr: g.label, median: describe(g.values).median, n: g.values.length }))
+      .sort((a, b) => b.median - a.median);
+
+    return { withData, values, stats, points, xMid, yMid, quadCounts, paretoItems, coreCount, nBanks: paretoItems.length, boxGroups, mfrMedians };
+  }, [machines, metric]);
+
+  const findings = useMemo<Finding[]>(() => {
+    const { stats, quadCounts, points, coreCount, nBanks, mfrMedians } = model;
+    if (stats.n === 0) return [];
+    const out: Finding[] = [];
+    const pctOf = (k: number) => points.length ? Math.round((k / points.length) * 100) : 0;
+
+    out.push({
+      icon: 'pie-chart-outline', color: C.navy,
+      text: <>De {nBanks} bancos, <RNText style={styles.anBold}>{coreCount} concentran el 80%</RNText> del {metricLabel} del piso — cualquier decisión de reubicación debe proteger primero a ese grupo.</>,
+    });
+
+    const cvTone = stats.cv > 60 ? C.red : stats.cv > 30 ? '#b45309' : C.green;
+    const cvWord = stats.cv > 60 ? 'alta' : stats.cv > 30 ? 'moderada' : 'baja';
+    out.push({
+      icon: 'pulse-outline', color: cvTone,
+      text: <>La dispersión del rendimiento es <RNText style={[styles.anBold, { color: cvTone }]}>{cvWord}</RNText> (coef. de variación {stats.cv.toFixed(0)}%): {stats.cv > 30 ? 'hay máquinas muy por encima y muy por debajo del promedio — el promedio solo no cuenta la historia.' : 'el piso rinde de forma pareja.'}</>,
+    });
+
+    const skew = stats.median > 0 ? ((stats.mean - stats.median) / stats.median) * 100 : 0;
+    if (skew > 10) {
+      out.push({
+        icon: 'analytics-outline', color: C.navy2,
+        text: <>La media ({money(stats.mean, 0)}) supera la mediana ({money(stats.median, 0)}) en {skew.toFixed(0)}% — pocas máquinas de alto volumen elevan el promedio. Usa la <RNText style={styles.anBold}>mediana</RNText> como referencia de la máquina "típica".</>,
+      });
+    }
+
+    if (quadCounts.low > 0) {
+      out.push({
+        icon: 'warning-outline', color: C.red,
+        text: <><RNText style={[styles.anBold, { color: C.red }]}>{quadCounts.low} máquinas ({pctOf(quadCounts.low)}%)</RNText> están bajo el promedio en volumen y retención — primeras candidatas a cambio de juego o reubicación.</>,
+      });
+    }
+    if (quadCounts.star > 0) {
+      out.push({
+        icon: 'star-outline', color: C.green,
+        text: <><RNText style={[styles.anBold, { color: C.green }]}>{quadCounts.star} máquinas ({pctOf(quadCounts.star)}%)</RNText> superan el promedio en ambas dimensiones — protege su ubicación y su juego actual.</>,
+      });
+    }
+
+    if (mfrMedians.length >= 2) {
+      const best = mfrMedians[0], worst = mfrMedians[mfrMedians.length - 1];
+      out.push({
+        icon: 'business-outline', color: C.navy3,
+        text: <>Por mediana, <RNText style={styles.anBold}>{best.mfr}</RNText> es el fabricante más sólido ({money(best.median, 0)}) y <RNText style={styles.anBold}>{worst.mfr}</RNText> el más débil ({money(worst.median, 0)}) en {metricLabel}.</>,
+      });
+    }
+    return out;
+  }, [model, metricLabel]);
+
+  const selected = useMemo(
+    () => (selKey ? model.withData.find(m => m.id === selKey) ?? null : null),
+    [selKey, model],
+  );
+
+  if (model.stats.n === 0) {
+    return (
+      <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.emptyState}>
+          <Ionicons name="stats-chart-outline" size={40} color={C.faint} />
+          <RNText style={styles.emptyTitle}>Sin datos de rendimiento</RNText>
+          <RNText style={styles.emptyBody}>Las estadísticas aparecerán cuando las máquinas tengan Coin-In y Win registrados.</RNText>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  const { stats } = model;
+  const statTiles: { label: string; value: string; hint?: string }[] = [
+    { label: 'Media',           value: money(stats.mean, 0),   hint: 'promedio simple' },
+    { label: 'Mediana',         value: money(stats.median, 0), hint: 'máquina típica' },
+    { label: 'Desv. estándar',  value: money(stats.sd, 0),     hint: 'variación promedio' },
+    { label: 'Coef. variación', value: `${stats.cv.toFixed(0)}%`, hint: 'dispersión relativa' },
+    { label: 'Cuartil 1 (25%)', value: money(stats.q1, 0),     hint: '25% rinde menos' },
+    { label: 'Cuartil 3 (75%)', value: money(stats.q3, 0),     hint: '25% rinde más' },
+    { label: 'Mínimo',          value: money(stats.min, 0) },
+    { label: 'Máximo',          value: money(stats.max, 0) },
+  ];
+
+  const selQuad = selected && (selected.avgCoinIn ?? 0) > 0
+    ? quadrantOf(
+        { x: selected.avgCoinIn ?? 0, y: ((selected.avgWin ?? 0) / (selected.avgCoinIn ?? 1)) * 100 },
+        model.xMid, model.yMid,
+      )
+    : null;
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <RNText style={styles.sectionIntro}>
+        Estadística descriptiva del piso sobre <RNText style={{ fontWeight: '700' }}>{metricLabel}</RNText> ({stats.n} máquinas
+        con datos). Cada gráfico responde una pregunta de gestión: ¿cómo se distribuye el rendimiento?, ¿qué máquinas combinan
+        volumen y retención?, ¿dónde se concentra el dinero?, ¿qué fabricante es consistente? Cambia la métrica con el
+        interruptor Coin-In/Win del encabezado.
+      </RNText>
+
+      {/* Hallazgos clave */}
+      <View style={[card.base, styles.anFindingsCard]}>
+        <View style={card.titleRow}>
+          <View style={card.accent} />
+          <RNText style={card.title}>Lecturas clave para decisiones</RNText>
+        </View>
+        <View style={{ gap: 12 }}>
+          {findings.map((f, i) => (
+            <View key={i} style={styles.anFindingRow}>
+              <View style={[styles.anFindingIcon, { backgroundColor: f.color + '15' }]}>
+                <Ionicons name={f.icon} size={15} color={f.color} />
+              </View>
+              <RNText style={styles.anFindingText}>{f.text}</RNText>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Resumen estadístico */}
+      <AnChartCard
+        title={`Resumen estadístico · ${metricLabel}`}
+        note="La media es sensible a valores extremos; la mediana no. Si difieren mucho, la distribución está sesgada y conviene citar ambas al presentar."
+      >
+        <View style={styles.anStatGrid}>
+          {statTiles.map(t => (
+            <View key={t.label} style={styles.anStatTile}>
+              <RNText style={styles.anStatValue}>{t.value}</RNText>
+              <RNText style={styles.anStatLabel}>{t.label}</RNText>
+              {t.hint ? <RNText style={styles.anStatHint}>{t.hint}</RNText> : null}
+            </View>
+          ))}
+        </View>
+      </AnChartCard>
+
+      {/* Distribución */}
+      <AnChartCard
+        title={`Distribución de máquinas · ${metricLabel}`}
+        note="Cada barra cuenta cuántas máquinas caen en ese rango. Una cola larga a la derecha significa que unas pocas máquinas generan mucho más que el resto."
+      >
+        <Histogram
+          values={model.values}
+          formatValue={v => money(v, 0)}
+          meanValue={stats.mean}
+          medianValue={stats.median}
+        />
+      </AnChartCard>
+
+      {/* Matriz volumen × retención */}
+      <AnChartCard
+        title="Matriz Volumen × Retención (por máquina)"
+        note="Derecha = más se apuesta en la máquina; arriba = el casino retiene un % mayor. Toca un punto para identificar la máquina."
+      >
+        <ScatterPlot
+          points={model.points}
+          xMid={model.xMid}
+          yMid={model.yMid}
+          xLabel="Avg Coin-In PD"
+          yLabel="Win % (retención)"
+          formatX={v => money(v, 0)}
+          formatY={v => `${v.toFixed(1)}%`}
+          onPointPress={k => setSelKey(prev => (prev === k ? null : k))}
+          selectedKey={selKey}
+        />
+        {selected && selQuad && (
+          <View style={[styles.anSelPanel, { borderLeftColor: QUADRANT_META[selQuad].color }]}>
+            <View style={{ flex: 1, minWidth: 180 }}>
+              <RNText style={styles.anSelTitle}>Máquina {selected.id} · {selected.location}</RNText>
+              <RNText style={styles.anSelSub} numberOfLines={1}>
+                {selected.game} · {shortMfr(selected.manufacturer)}
+              </RNText>
+              <View style={[styles.anSelQuadChip, { backgroundColor: QUADRANT_META[selQuad].color + '15', borderColor: QUADRANT_META[selQuad].color + '55' }]}>
+                <RNText style={[styles.anSelQuadText, { color: QUADRANT_META[selQuad].color }]}>
+                  {QUADRANT_META[selQuad].label}
+                </RNText>
+              </View>
+            </View>
+            <View style={styles.anSelMetrics}>
+              <View style={styles.anSelMetric}>
+                <RNText style={styles.anSelMetricVal}>{money(selected.avgCoinIn ?? 0, 0)}</RNText>
+                <RNText style={styles.anSelMetricLabel}>CI PD</RNText>
+              </View>
+              <View style={styles.anSelMetric}>
+                <RNText style={[styles.anSelMetricVal, { color: C.green }]}>{money(selected.avgWin ?? 0, 0)}</RNText>
+                <RNText style={styles.anSelMetricLabel}>Win PD</RNText>
+              </View>
+              <View style={styles.anSelMetric}>
+                <RNText style={[styles.anSelMetricVal, { color: C.navy3 }]}>
+                  {(((selected.avgWin ?? 0) / (selected.avgCoinIn ?? 1)) * 100).toFixed(1)}%
+                </RNText>
+                <RNText style={styles.anSelMetricLabel}>Win %</RNText>
+              </View>
+            </View>
+            <Pressable style={styles.anSelBtn} onPress={() => onOpenBank(bankOf(selected.location))} hoverScale={1.04}>
+              <RNText style={styles.anSelBtnText}>Ver banco</RNText>
+              <Ionicons name="arrow-forward" size={13} color="#fff" />
+            </Pressable>
+          </View>
+        )}
+      </AnChartCard>
+
+      {/* Concentración (Pareto) */}
+      <AnChartCard
+        title={`Concentración por banco (Pareto) · ${metricLabel}`}
+        note="Barras = aporte de cada banco, de mayor a menor; la línea dorada acumula el porcentaje del total. Los bancos resaltados sostienen el piso: protégelos antes de mover máquinas."
+      >
+        <ParetoChart items={model.paretoItems} formatValue={v => money(v, 0)} />
+      </AnChartCard>
+
+      {/* Consistencia por fabricante */}
+      <AnChartCard
+        title={`Consistencia por fabricante · ${metricLabel}`}
+        note="La caja cubre el 50% central de las máquinas del fabricante y la marca gruesa es su mediana. Cajas anchas = rendimiento desigual dentro del mismo fabricante; medianas a la derecha de la línea dorada superan a la máquina típica del piso."
+      >
+        <BoxPlotRows
+          groups={model.boxGroups}
+          formatValue={v => money(v, 0)}
+          referenceValue={stats.median}
+          referenceLabel="Mediana del piso"
+        />
+      </AnChartCard>
+
+      <RNText style={styles.footer}>
+        Casino Atlántico Manatí · Análisis estadístico de {metricLabel} por máquina, banco y fabricante
+      </RNText>
     </ScrollView>
   );
 }
@@ -134,13 +574,30 @@ const BANK_FILTERS: FilterDef[] = [
   { id: 'win100', label: 'Win < $100',   type: 'win',    max: 100  },
 ];
 
-function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number }) {
+function BancosSection({ metric, onEdit, gutter, focusBank }: {
+  metric: Metric; onEdit: (m: SlotMachine) => void; gutter: number;
+  focusBank?: string | null;
+}) {
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
   const machines      = useSlotFloorStore(s => s.machines);
   const groups        = getBankGroups();
 
   const [filterId, setFilterId] = useState<string | null>(null);
   const activeFilter = BANK_FILTERS.find(f => f.id === filterId) ?? null;
+
+  // Drill-down from Plano/Resumen: clear any filter and scroll to the bank
+  // once its card has reported its position.
+  const scrollRef = useRef<ScrollView>(null);
+  const bankYs    = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!focusBank) return;
+    setFilterId(null);
+    const t = setTimeout(() => {
+      const y = bankYs.current[focusBank];
+      if (y != null) scrollRef.current?.scrollTo({ y: Math.max(y + gutter - 12, 0), animated: true });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [focusBank, gutter]);
 
   const filteredMachines = useMemo(() => {
     if (!activeFilter) return [];
@@ -166,6 +623,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
           <Pressable
             style={[styles.filterChip, !filterId && styles.filterChipActive]}
             onPress={() => setFilterId(null)}
+            hoverScale={1.04}
           >
             <RNText style={[styles.filterChipText, !filterId && styles.filterChipTextActive]}>Todos los bancos</RNText>
           </Pressable>
@@ -177,6 +635,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
                 filterId === f.id && (f.type === 'win' ? styles.filterChipWinActive : styles.filterChipCIActive),
               ]}
               onPress={() => setFilterId(filterId === f.id ? null : f.id)}
+              hoverScale={1.04}
             >
               <RNText style={[styles.filterChipText, filterId === f.id && styles.filterChipTextActive]}>{f.label}</RNText>
             </Pressable>
@@ -208,8 +667,14 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
         </ScrollView>
       ) : (
         /* Normal bank cards view */
-        <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-          <BankBrowser groups={groups} rankMetric={metric} onEdit={onEdit} />
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+          <BankBrowser
+            groups={groups}
+            rankMetric={metric}
+            onEdit={onEdit}
+            focusBank={focusBank}
+            onBankLayout={(bank, y) => { bankYs.current[bank] = y; }}
+          />
           <RNText style={styles.footer}>{groups.length} bancos · {groups.reduce((s, g) => s + g.machines.length, 0)} máquinas</RNText>
         </ScrollView>
       )}
@@ -220,8 +685,7 @@ function BancosSection({ metric, onEdit, gutter }: { metric: Metric; onEdit: (m:
 // ── Section: Comparativa vs 2025 ──────────────────────────────────────────────
 
 function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+  const machines = useActiveMachines();
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
@@ -233,10 +697,44 @@ function ComparativaSection({ metric, gutter }: { metric: Metric; gutter: number
 
 // ── Section: Fabricantes ──────────────────────────────────────────────────────
 
-function FabricantesSection({ gutter }: { gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines    = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+type MfrSortKey = 'avgCoinIn' | 'avgWin' | 'count';
+
+const MFR_SORT_OPTIONS: { id: MfrSortKey; label: string; topLabel: string }[] = [
+  { id: 'avgCoinIn', label: 'Avg Coin-In PD', topLabel: '🏆 Mejor CI PD' },
+  { id: 'avgWin',    label: 'Avg Win PD',     topLabel: '🏆 Mejor Win PD' },
+  { id: 'count',     label: 'Máquinas',       topLabel: '🏆 Más Máquinas' },
+];
+
+// Animates the "vs floor" bar fill from 0 on mount, staggered top→bottom —
+// same idiom as HBars.AnimatedFill. `useRef` captures the delay once so a
+// re-sort (which reassigns each card's index) doesn't replay the entrance
+// on a bar that's already on screen.
+function MfrBarFill({ widthPct, color, delay }: { widthPct: number; color: string; delay: number }) {
+  const width = useSharedValue(0);
+  const mountDelay = useRef(delay).current;
+
+  useEffect(() => {
+    width.value = withDelay(mountDelay, withTiming(widthPct, { duration: 360 }));
+  }, [widthPct, mountDelay, width]);
+
+  const animated = useAnimatedStyle(() => ({ width: `${width.value}%` }));
+
+  return (
+    <Animated.View style={[styles.mfrBarFillWrap, animated]}>
+      <LinearGradient
+        colors={[color, color + 'aa']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.mfrBarFill}
+      />
+    </Animated.View>
+  );
+}
+
+function FabricantesSection({ gutter, highlightMfr }: { gutter: number; highlightMfr?: string | null }) {
+  const machines = useActiveMachines();
   const floorStats = useSlotFloorStore(s => s.floorStats);
+  const [sortKey, setSortKey] = useState<MfrSortKey>('avgCoinIn');
 
   const rows = useMemo(() => {
     const total     = machines.length;
@@ -260,8 +758,14 @@ function FabricantesSection({ gutter }: { gutter: number }) {
         vsFloor:    floorAvgCI > 0 ? ((e.count ? e.totalCoin / e.count : 0) / floorAvgCI) * 100 : 100,
         color:      mfrColor(mfr, 0),
       }))
-      .sort((a, b) => b.avgCoinIn - a.avgCoinIn);
-  }, [machines, floorStats]);
+      .sort((a, b) => b[sortKey] - a[sortKey]);
+  }, [machines, floorStats, sortKey]);
+
+  const leader = useMemo(
+    () => [...rows].sort((a, b) => b.avgCoinIn - a.avgCoinIn)[0],
+    [rows],
+  );
+  const topBadge = MFR_SORT_OPTIONS.find(o => o.id === sortKey)?.topLabel ?? '🏆 Líder';
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
@@ -279,22 +783,50 @@ function FabricantesSection({ gutter }: { gutter: number }) {
           <RNText style={styles.mfrSummaryNum}>{rows.length}</RNText>
           <RNText style={styles.mfrSummaryLabel}>Fabricantes{'\n'}en el Piso</RNText>
         </View>
-        <View style={[styles.mfrSummaryCard, { borderLeftColor: rows[0]?.color, borderLeftWidth: 4 }]}>
-          <RNText style={[styles.mfrSummaryNum, { color: rows[0]?.color }]}>{rows[0]?.count ?? 0}</RNText>
-          <RNText style={styles.mfrSummaryLabel}>Máquinas del{'\n'}líder ({rows[0]?.mfr ?? '—'})</RNText>
+        <View style={[styles.mfrSummaryCard, { borderLeftColor: leader?.color, borderLeftWidth: 4 }]}>
+          <RNText style={[styles.mfrSummaryNum, { color: leader?.color }]}>{leader?.count ?? 0}</RNText>
+          <RNText style={styles.mfrSummaryLabel}>Máquinas del{'\n'}líder ({leader?.mfr ?? '—'})</RNText>
         </View>
         <View style={styles.mfrSummaryCard}>
-          <RNText style={[styles.mfrSummaryNum, { color: C.green }]}>{money(rows[0]?.avgWin ?? 0, 0)}</RNText>
+          <RNText style={[styles.mfrSummaryNum, { color: C.green }]}>{money(leader?.avgWin ?? 0, 0)}</RNText>
           <RNText style={styles.mfrSummaryLabel}>Mejor Avg{'\n'}Win PD</RNText>
         </View>
       </View>
 
-      {/* Per-manufacturer cards */}
+      {/* Sort control */}
+      <View style={styles.mfrSortRow}>
+        <RNText style={styles.mfrSortLabel}>Ordenar por:</RNText>
+        <View style={styles.mfrSortPills}>
+          {MFR_SORT_OPTIONS.map(opt => {
+            const active = sortKey === opt.id;
+            return (
+              <Pressable
+                key={opt.id}
+                style={[styles.mfrSortPill, active && styles.mfrSortPillActive]}
+                onPress={() => setSortKey(opt.id)}
+                hoverScale={1.04}
+              >
+                <RNText style={[styles.mfrSortPillText, active && styles.mfrSortPillTextActive]}>
+                  {opt.label}
+                </RNText>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Per-manufacturer cards — keyed by sortKey so re-sorting remounts the
+          list and replays the staggered entrance in the new order. */}
+      <View key={sortKey}>
       {rows.map((r, idx) => {
         const abovePct  = r.vsFloor - 100;
         const fillWidth = Math.min(Math.max(r.vsFloor, 10), 190) / 190;
         return (
-          <View key={r.mfr} style={[styles.mfrCard, idx === 0 && styles.mfrCardTop]}>
+          <Animated.View
+            key={r.mfr}
+            entering={FadeInDown.delay(idx * 40).duration(260)}
+            style={[styles.mfrCard, idx === 0 && styles.mfrCardTop, highlightMfr === r.mfr && styles.mfrCardFocused]}
+          >
 
             {/* Header: color bar + name + count */}
             <View style={[styles.mfrColorStripe, { backgroundColor: r.color }]} />
@@ -305,7 +837,7 @@ function FabricantesSection({ gutter }: { gutter: number }) {
                     <RNText style={styles.mfrCardName}>{r.mfr}</RNText>
                     {idx === 0 && (
                       <View style={styles.mfrTopBadge}>
-                        <RNText style={styles.mfrTopBadgeText}>🏆 Mejor CI PD</RNText>
+                        <RNText style={styles.mfrTopBadgeText}>{topBadge}</RNText>
                       </View>
                     )}
                   </View>
@@ -351,7 +883,7 @@ function FabricantesSection({ gutter }: { gutter: number }) {
                   </RNText>
                 </View>
                 <View style={styles.mfrBarTrack}>
-                  <View style={[styles.mfrBarFill, { width: `${fillWidth * 100}%` as any, backgroundColor: r.color }]} />
+                  <MfrBarFill widthPct={fillWidth * 100} color={r.color} delay={idx * 40} />
                   <View style={styles.mfrBarMidLine} />
                 </View>
                 <View style={styles.mfrBarEndLabels}>
@@ -361,9 +893,10 @@ function FabricantesSection({ gutter }: { gutter: number }) {
                 </View>
               </View>
             </View>
-          </View>
+          </Animated.View>
         );
       })}
+      </View>
 
       <RNText style={styles.footer}>
         Avg Coin-In PD = promedio de lo apostado por máquina en un día · Avg Win PD = ganancia del casino por máquina en un día
@@ -414,9 +947,8 @@ function BetSegCard({ title, count, low, high, avg, teal = false }: {
   );
 }
 
-function ApuestasSection({ gutter }: { gutter: number }) {
-  const allMachines = useSlotFloorStore(s => s.machines);
-  const machines = useMemo(() => allMachines.filter(m => m.active), [allMachines]);
+function ApuestasSection({ gutter, onEdit }: { gutter: number; onEdit: (m: SlotMachine) => void }) {
+  const machines = useActiveMachines();
   const [betView, setBetView] = useState<'min' | 'max'>('min');
   const [expandedDeno, setExpandedDeno] = useState<string | null>(null);
 
@@ -473,6 +1005,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
         <Pressable
           style={[styles.betSwitchBtn, betView === 'min' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('min')}
+          hoverScale={1.02}
         >
           <RNText style={[styles.betSwitchLabel, betView === 'min' && styles.betSwitchLabelActive]}>MIN BET</RNText>
           <RNText style={[styles.betSwitchSub, betView === 'min' && { color: '#fff' }]}>Apuesta Mínima</RNText>
@@ -480,6 +1013,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
         <Pressable
           style={[styles.betSwitchBtn, betView === 'max' && styles.betSwitchBtnActive]}
           onPress={() => setBetView('max')}
+          hoverScale={1.02}
         >
           <RNText style={[styles.betSwitchLabel, betView === 'max' && styles.betSwitchLabelActive]}>MAX BET</RNText>
           <RNText style={[styles.betSwitchSub, betView === 'max' && { color: '#fff' }]}>Apuesta Máxima</RNText>
@@ -504,20 +1038,23 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </View>
 
-          {/* Rango visual */}
-          <View style={styles.betRangeBar}>
-            <RNText style={styles.betRangeLabel}>{money(minStats.lowest, 2)}</RNText>
-            <View style={styles.betRangeTrack}>
-              <View style={[styles.betRangeFill, { width: `${(minStats.avg / minStats.highest) * 100}%` as any }]} />
-              <View style={styles.betRangeMarker} />
-            </View>
-            <RNText style={styles.betRangeLabel}>{money(minStats.highest, 2)}</RNText>
+          {/* Distribución real de Min Bet */}
+          <View style={[card.base]}>
+            <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Distribución de Apuesta Mínima</RNText></View>
+            <Histogram
+              values={machines.map(m => m.minBet).filter(b => b > 0)}
+              formatValue={v => money(v, 2)}
+              meanValue={minStats.avg}
+              bins={10}
+              color="#2d6a6a"
+            />
           </View>
 
           {/* Segmentos interactivos */}
           <Pressable
             style={[styles.betSegPress, { borderLeftColor: '#2d6a6a' }]}
             onPress={() => setExpandedDeno(expandedDeno === 'acc' ? null : 'acc')}
+            hoverScale={1.01}
           >
             <View style={styles.betSegPressHeader}>
               <View>
@@ -527,7 +1064,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
               <View style={styles.betSegPressRight}>
                 <RNText style={[styles.betSegCount, { color: '#2d6a6a' }]}>{minStats.accCount}</RNText>
                 <RNText style={styles.betSegCountLabel}>máquinas</RNText>
-                <Ionicons name={expandedDeno === 'acc' ? 'chevron-up' : 'chevron-down'} size={16} color="#2d6a6a" />
+                <AnimatedChevron expanded={expandedDeno === 'acc'} size={16} color="#2d6a6a" />
               </View>
             </View>
             <View style={styles.betSegStats}>
@@ -537,21 +1074,19 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </Pressable>
           {expandedDeno === 'acc' && (
-            <View style={styles.betMachineList}>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {minStats.accMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
-                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                  <RNText style={styles.betMcId}>{m.id}</RNText>
-                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                  <RNText style={[styles.betMcVal, { color: '#2d6a6a' }]}>{money(m.minBet, 2)}</RNText>
-                </View>
+                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                  <MachineRow machine={m} onEdit={onEdit} />
+                </Animated.View>
               ))}
-            </View>
+            </Animated.View>
           )}
 
           <Pressable
             style={[styles.betSegPress, { borderLeftColor: C.gold }]}
             onPress={() => setExpandedDeno(expandedDeno === 'high' ? null : 'high')}
+            hoverScale={1.01}
           >
             <View style={styles.betSegPressHeader}>
               <View>
@@ -561,7 +1096,7 @@ function ApuestasSection({ gutter }: { gutter: number }) {
               <View style={styles.betSegPressRight}>
                 <RNText style={[styles.betSegCount, { color: C.gold }]}>{minStats.highCount}</RNText>
                 <RNText style={styles.betSegCountLabel}>máquinas</RNText>
-                <Ionicons name={expandedDeno === 'high' ? 'chevron-up' : 'chevron-down'} size={16} color={C.gold} />
+                <AnimatedChevron expanded={expandedDeno === 'high'} size={16} color={C.gold} />
               </View>
             </View>
             <View style={styles.betSegStats}>
@@ -571,16 +1106,13 @@ function ApuestasSection({ gutter }: { gutter: number }) {
             </View>
           </Pressable>
           {expandedDeno === 'high' && (
-            <View style={styles.betMachineList}>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {minStats.highMachines.sort((a, b) => a.minBet - b.minBet).map((m, i) => (
-                <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                  <RNText style={styles.betMcId}>{m.id}</RNText>
-                  <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                  <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                  <RNText style={[styles.betMcVal, { color: C.gold }]}>{money(m.minBet, 2)}</RNText>
-                </View>
+                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                  <MachineRow machine={m} onEdit={onEdit} />
+                </Animated.View>
               ))}
-            </View>
+            </Animated.View>
           )}
         </>
       )}
@@ -623,45 +1155,35 @@ function ApuestasSection({ gutter }: { gutter: number }) {
                 style={[styles.denoTile, { borderColor: (DENO_COLORS[deno] ?? C.navy3) + '55' },
                   expandedDeno === deno && { borderColor: DENO_COLORS[deno] ?? C.navy3, borderWidth: 2 }]}
                 onPress={() => setExpandedDeno(expandedDeno === deno ? null : deno)}
+                hoverScale={1.03}
               >
                 <View style={[styles.denoTileBadge, { backgroundColor: DENO_COLORS[deno] ?? C.navy3 }]}>
                   <RNText style={styles.denoTileBadgeText}>{DENO_LABELS[deno] ?? deno}</RNText>
                 </View>
                 <RNText style={styles.denoTileCount}>{mList.length}</RNText>
                 <RNText style={styles.denoTileSub}>máquinas</RNText>
-                <Ionicons
-                  name={expandedDeno === deno ? 'chevron-up' : 'chevron-down'}
-                  size={13} color={C.muted} style={{ marginTop: 4 }}
-                />
+                <View style={{ marginTop: 4 }}>
+                  <AnimatedChevron expanded={expandedDeno === deno} size={13} color={C.muted} />
+                </View>
               </Pressable>
             ))}
           </View>
 
           {/* Expanded deno machine list */}
           {expandedDeno && maxStats.denoBuckets.find(([d]) => d === expandedDeno) && (
-            <View style={styles.betMachineList}>
-              <View style={styles.betMachineListHeader}>
-                <RNText style={styles.betMcHeaderText}>ID · Ubicación · Juego</RNText>
-                <RNText style={styles.betMcHeaderText}>Max Bet</RNText>
-              </View>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.betMachineList}>
               {(maxStats.denoBuckets.find(([d]) => d === expandedDeno)![1] as SlotMachine[])
                 .sort((a, b) => {
                   const ba = Math.max(a.maxBet01 ?? 0, a.maxBet02 ?? 0, a.maxBet05 ?? 0, a.maxBet10 ?? 0);
                   const bb = Math.max(b.maxBet01 ?? 0, b.maxBet02 ?? 0, b.maxBet05 ?? 0, b.maxBet10 ?? 0);
                   return bb - ba;
                 })
-                .map((m, i) => {
-                  const mb = Math.max(m.maxBet01 ?? 0, m.maxBet02 ?? 0, m.maxBet05 ?? 0, m.maxBet10 ?? 0);
-                  return (
-                    <View key={m.id} style={[styles.betMachineRow, i % 2 === 1 && { backgroundColor: '#f8fafc' }]}>
-                      <RNText style={styles.betMcId}>{m.id}</RNText>
-                      <RNText style={styles.betMcLoc}>{m.location}</RNText>
-                      <RNText style={styles.betMcGame} numberOfLines={1}>{m.game}</RNText>
-                      <RNText style={[styles.betMcVal, { color: C.navy }]}>{mb > 0 ? money(mb, 2) : '—'}</RNText>
-                    </View>
-                  );
-                })}
-            </View>
+                .map((m, i) => (
+                  <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 12) * 25)}>
+                    <MachineRow machine={m} onEdit={onEdit} />
+                  </Animated.View>
+                ))}
+            </Animated.View>
           )}
 
           {/* Top 20 Max Bet chart */}
@@ -677,30 +1199,83 @@ function ApuestasSection({ gutter }: { gutter: number }) {
 
 // ── Section: Cambios ──────────────────────────────────────────────────────────
 
-function CambiosSection({ gutter }: { gutter: number }) {
+// Colors come from CHANGE_COLORS so the cards can't drift from the row tags.
+const CAMBIOS_KPI_DEFS = [
+  { type: 'compra',       icon: 'add-circle-outline'      as const, label: 'Compras' },
+  { type: 'reubicacion',  icon: 'swap-horizontal-outline' as const, label: 'Reubicaciones' },
+  { type: 'cambio_juego', icon: 'game-controller-outline' as const, label: 'Cambios de Juego' },
+  { type: 'removida',     icon: 'remove-circle-outline'   as const, label: 'Removidas' },
+];
+
+function CambiosSection({ gutter, onOpenBank }: { gutter: number; onOpenBank: (bank: string) => void }) {
   const changes = useSlotFloorStore(s => s.machineChanges);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
   const summary = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const c of changes) counts[c.type] = (counts[c.type] ?? 0) + 1;
+    for (const { type } of CAMBIOS_KPI_DEFS) counts[type] = 0;
+    for (const c of changes) if (c.type in counts) counts[c.type]++;
     return counts;
+  }, [changes]);
+
+  // Filter by type (tapping a KPI card), then group by recorded date.
+  const dateGroups = useMemo(() => {
+    const filtered = typeFilter ? changes.filter(c => c.type === typeFilter) : changes;
+    const map = new Map<string, MachineChange[]>();
+    for (const c of filtered) {
+      const key = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : 'Sin fecha';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+    return Array.from(map.entries());
+  }, [changes, typeFilter]);
+
+  // Same date-key derivation as `dateGroups`, but unfiltered and counted by
+  // type so the timeline and KPI cards always agree, and ordered chronologically.
+  const timelineBuckets: TimelineBucket[] = useMemo(() => {
+    const map = new Map<string, TimelineBucket>();
+    for (const c of changes) {
+      const key = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : 'Sin fecha';
+      const sortKey = c.recordedAt ? new Date(c.recordedAt).getTime() : 0;
+      if (!map.has(key)) map.set(key, { date: key, sortKey, counts: {} });
+      const bucket = map.get(key)!;
+      bucket.counts[c.type] = (bucket.counts[c.type] ?? 0) + 1;
+    }
+    return Array.from(map.values()).sort((a, b) => a.sortKey - b.sortKey);
   }, [changes]);
 
   return (
     <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
-      {/* Summary pills */}
       {changes.length > 0 && (
-        <View style={styles.changeSummary}>
-          {Object.entries(summary).map(([type, count]) => (
-            <View
-              key={type}
-              style={[styles.changePill, { backgroundColor: (CHANGE_COLORS[type] ?? C.navy3) + '18', borderColor: (CHANGE_COLORS[type] ?? C.navy3) + '44' }]}
-            >
-              <RNText style={[styles.changePillText, { color: CHANGE_COLORS[type] ?? C.navy3 }]}>
-                {CHANGE_LABELS[type] ?? type}: {count}
-              </RNText>
-            </View>
-          ))}
+        <View style={card.base}>
+          <View style={card.titleRow}><View style={card.accent} /><RNText style={card.title}>Cambios por Fecha</RNText></View>
+          <ChangesTimeline
+            buckets={timelineBuckets}
+            colors={CHANGE_COLORS}
+            labels={CHANGE_LABELS}
+            types={CAMBIOS_KPI_DEFS.map(d => d.type)}
+            activeType={typeFilter}
+          />
+        </View>
+      )}
+
+      {/* KPI dashboard — tap a card to filter the log (and dim the chart) by that type */}
+      {changes.length > 0 && (
+        <View style={styles.kpiGrid}>
+          {CAMBIOS_KPI_DEFS.map(({ type, icon, label }) => {
+            const active = typeFilter === type;
+            return (
+              <StatCard
+                key={type}
+                label={label}
+                value={String(summary[type])}
+                icon={icon}
+                tone={CHANGE_TONE[type] ?? 'navy'}
+                onPress={() => setTypeFilter(active ? null : type)}
+                active={active}
+              />
+            );
+          })}
         </View>
       )}
 
@@ -711,19 +1286,54 @@ function CambiosSection({ gutter }: { gutter: number }) {
           <RNText style={styles.emptyBody}>Los cambios se registran automáticamente al editar una máquina.</RNText>
         </View>
       ) : (
-        <View style={card.base}>
-          {changes.map((c, i) => (
-            <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} />
+        <>
+          {typeFilter && (
+            <RNText style={styles.cambiosFilterNote}>
+              Mostrando solo {CHANGE_LABELS[typeFilter]?.toLowerCase() ?? typeFilter} — toca la tarjeta de nuevo para ver todos
+            </RNText>
+          )}
+          {dateGroups.map(([date, group]) => (
+            <View key={date} style={{ gap: 8 }}>
+              <View style={styles.cambiosDateHeader}>
+                <Ionicons name="calendar-clear-outline" size={12} color={C.muted} />
+                <RNText style={styles.cambiosDateText}>{date}</RNText>
+                <RNText style={styles.cambiosDateCount}>{group.length} {group.length === 1 ? 'cambio' : 'cambios'}</RNText>
+              </View>
+              <View style={[card.base, { padding: 0, overflow: 'hidden' }]}>
+                {group.map((c, i) => (
+                  <ChangeRow key={c.id ?? i} change={c} alt={i % 2 === 1} onOpenBank={onOpenBank} />
+                ))}
+              </View>
+            </View>
           ))}
-        </View>
+          {dateGroups.length === 0 && (
+            <RNText style={styles.empty}>No hay cambios de este tipo</RNText>
+          )}
+        </>
       )}
     </ScrollView>
   );
 }
 
-function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) {
+function ChangeRow({ change: c, alt, onOpenBank }: { change: MachineChange; alt: boolean; onOpenBank: (bank: string) => void }) {
   const color = CHANGE_COLORS[c.type] ?? C.navy3;
   const date  = c.recordedAt ? new Date(c.recordedAt).toLocaleDateString('es-PR') : '—';
+
+  let locationLine: string | null = null;
+  if (c.type === 'compra' && c.location2025) {
+    locationLine = `→ ${c.location2025}`;
+  } else if (c.type === 'reubicacion' && c.location2024 && c.location2025) {
+    locationLine = `${c.location2024} → ${c.location2025}`;
+  } else if (c.type === 'removida' && c.location2024) {
+    locationLine = c.location2024;
+  }
+
+  let gameLine: string | null = null;
+  if (c.type === 'compra' && c.game2025) {
+    gameLine = c.game2025;
+  } else if (c.game2024 && c.game2025 && c.game2024 !== c.game2025) {
+    gameLine = `${c.game2024} → ${c.game2025}`;
+  }
 
   return (
     <View style={[styles.changeRow, alt && styles.tableRowAlt]}>
@@ -732,15 +1342,83 @@ function ChangeRow({ change: c, alt }: { change: MachineChange; alt: boolean }) 
       </View>
       <View style={styles.changeInfo}>
         <RNText style={styles.changeMcId}>Máquina {c.mc}</RNText>
-        {c.game2024 && c.game2025 && c.game2024 !== c.game2025 && (
-          <RNText style={styles.changeDetail} numberOfLines={1}>{c.game2024} → {c.game2025}</RNText>
-        )}
-        {c.location2024 && c.location2025 && c.location2024 !== c.location2025 && (
-          <RNText style={styles.changeDetail}>{c.location2024} → {c.location2025}</RNText>
-        )}
+        {gameLine ? <RNText style={styles.changeDetail} numberOfLines={2}>{gameLine}</RNText> : null}
+        {locationLine ? <RNText style={styles.changeLocationLine}>{locationLine}</RNText> : null}
         {c.periodLabel ? <RNText style={styles.changePeriod}>{c.periodLabel}</RNText> : null}
       </View>
       <RNText style={styles.changeDate}>{date}</RNText>
+      <Pressable
+        style={styles.changeBankBtn}
+        onPress={() => onOpenBank(String(c.bank).padStart(2, '0'))}
+        hoverScale={1.04}
+      >
+        <RNText style={styles.changeBankBtnText}>Ver banco</RNText>
+        <Ionicons name="arrow-forward" size={12} color={C.navy3} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ── Global search results ─────────────────────────────────────────────────────
+
+const SEARCH_LIMIT = 50;
+
+function SearchResults({ gutter, onEdit }: { gutter: number; onEdit: (m: SlotMachine) => void }) {
+  const query    = useSlotFloorStore(s => s.explorerSearch);
+  const machines = useSlotFloorStore(s => s.machines);
+  const getFilteredMachines = useSlotFloorStore(s => s.getFilteredMachines);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const all = useMemo(() => getFilteredMachines(), [machines, query]);
+  const results = all.slice(0, SEARCH_LIMIT);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.sectionContent, { padding: gutter }]} showsVerticalScrollIndicator={false}>
+      <View style={styles.filterResultHeader}>
+        <RNText style={styles.filterResultTitle}>
+          {all.length} {all.length === 1 ? 'resultado' : 'resultados'} para “{query.trim()}”
+        </RNText>
+        <RNText style={styles.filterResultSub}>
+          Búsqueda por ID, juego, fabricante o ubicación
+          {all.length > SEARCH_LIMIT ? ` · mostrando las primeras ${SEARCH_LIMIT}` : ''}
+        </RNText>
+      </View>
+      <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.border }}>
+        {results.map(m => (
+          <MachineRow key={m.id} machine={m} onEdit={onEdit} />
+        ))}
+        {results.length === 0 && (
+          <RNText style={styles.empty}>Sin coincidencias — intenta con el ID, el juego o la ubicación (ej. 09-01)</RNText>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+
+const SKELETON_TINT = { backgroundColor: C.track };
+
+function DashboardSkeleton({ gutter }: { gutter: number }) {
+  return (
+    <View style={{ padding: gutter, gap: 14 }}>
+      <View style={styles.kpiGrid}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <View key={i} style={styles.skelKpi}>
+            <Skeleton width={36} height={36} rounded="md" style={SKELETON_TINT} />
+            <Skeleton width="70%" height={22} style={SKELETON_TINT} />
+            <Skeleton width="50%" height={12} style={SKELETON_TINT} />
+          </View>
+        ))}
+      </View>
+      {[0, 1].map(i => (
+        <View key={i} style={styles.skelCard}>
+          <Skeleton width="40%" height={16} style={SKELETON_TINT} />
+          <Skeleton width="100%" height={28} style={SKELETON_TINT} />
+          <Skeleton width="85%" height={28} style={SKELETON_TINT} />
+          <Skeleton width="70%" height={28} style={SKELETON_TINT} />
+        </View>
+      ))}
     </View>
   );
 }
@@ -751,68 +1429,122 @@ export default function DashboardScreen() {
   const [tab, setTab]              = useState('resumen');
   const [metric, setMetric]        = useState<Metric>('avgCoinIn');
   const [editMachine, setEditMachine] = useState<SlotMachine | null>(null);
+  const [searchOpen, setSearchOpen]   = useState(false);
+  const [focusBank, setFocusBank]     = useState<string | null>(null);
+  const [focusMfr, setFocusMfr]       = useState<string | null>(null);
 
   const init          = useSlotFloorStore(s => s.init);
   const initialized   = useSlotFloorStore(s => s.initialized);
-  const machines      = useSlotFloorStore(s => s.machines);
+  const machines      = useActiveMachines();
   const getBankGroups = useSlotFloorStore(s => s.getBankGroups);
+  const explorerSearch    = useSlotFloorStore(s => s.explorerSearch);
+  const setExplorerSearch = useSlotFloorStore(s => s.setExplorerSearch);
   const profile       = useAuthStore(s => s.profile);
+  const session       = useAuthStore(s => s.session);
   const signOut       = useAuthStore(s => s.signOut);
 
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const gutter    = isDesktop ? 32 : width >= 640 ? 24 : 16;
 
-  useEffect(() => { init(); }, [init]);
+  // Only fetch floor data once a session exists, so no anonymous query fires
+  // during the brief window before the unauthenticated redirect to /login.
+  useEffect(() => { if (session) init(); }, [init, session]);
 
   const periodLabel = useMemo(() => resolvePeriodLabel(machines), [machines]);
 
   const handleGenerateReport = () => {
     generateFloorReport({
-      machines: machines.filter(m => m.active),
+      machines,
       bankGroups: getBankGroups(),
       periodLabel,
     });
   };
 
-  const showMetricToggle = tab === 'resumen' || tab === 'bancos' || tab === 'comparativa';
+  // Tab content slides in from the side you are moving towards, so jumping
+  // between tabs reads as one continuous left/right motion.
+  const slideDir = useRef<1 | -1>(1);
+  const goToTab = (t: string) => {
+    const indexOf = (key: string) => TABS.findIndex(x => x.key === key);
+    slideDir.current = indexOf(t) >= indexOf(tab) ? 1 : -1;
+    setTab(t);
+  };
+
+  // Cross-filtering: charts and the heatmap jump into the relevant tab.
+  const openBank = (bank: string) => { setFocusBank(bank); goToTab('bancos'); };
+  const openMfr  = (mfr: string)  => { setFocusMfr(mfr); goToTab('fabricantes'); };
+  const handleTabChange = (t: string) => {
+    if (t !== 'bancos')      setFocusBank(null);
+    if (t !== 'fabricantes') setFocusMfr(null);
+    goToTab(t);
+  };
+  const closeSearch = () => { setSearchOpen(false); setExplorerSearch(''); };
+
+  const searching = searchOpen && explorerSearch.trim().length >= 2;
+  const showMetricToggle = ['resumen', 'plano', 'analisis', 'bancos', 'comparativa'].includes(tab);
 
   return (
     <View style={styles.root}>
       <SafeAreaView edges={['top']} style={styles.topSafe}>
-        {/* Top bar — responsive: taller + larger logo on desktop */}
-        <View style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 14 : 10 }]}>
+        {/* Top bar — navy-to-navy gradient banner, gold accents. Taller + larger logo on desktop. */}
+        <LinearGradient
+          colors={['#1a2332', '#2d3e50', '#3a4f68']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.topBar, { paddingHorizontal: gutter, paddingVertical: isDesktop ? 16 : 12 }]}
+        >
           <View style={styles.brandRow}>
-            <View style={[styles.logoMark, isDesktop && styles.logoMarkLg]}>
+            <LinearGradient
+              colors={['#e6c9a8', '#d4a574', '#b8935f']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.logoMark, isDesktop && styles.logoMarkLg]}
+            >
               <View style={[styles.logoChipRing, isDesktop && styles.logoChipRingLg]}>
                 <RNText style={[styles.logoMarkText, isDesktop && styles.logoMarkTextLg]}>CA</RNText>
               </View>
-            </View>
+            </LinearGradient>
             <View>
               <RNText style={[styles.brandText, isDesktop && styles.brandTextLg]}>Casino Atlántico Manatí</RNText>
               <View style={styles.periodChip}>
-                <Ionicons name="calendar-outline" size={11} color={C.gold} />
+                <Ionicons name="calendar-outline" size={11} color="#e6c9a8" />
                 <RNText style={styles.periodChipText}>Período: {periodLabel}</RNText>
               </View>
             </View>
           </View>
           <View style={styles.topRight}>
+            <Pressable
+              onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+              hitSlop={8}
+              accessibilityLabel={searchOpen ? 'Cerrar búsqueda' : 'Buscar máquinas'}
+              style={[styles.searchBtn, searchOpen && styles.searchBtnActive]}
+              hoverScale={1.08}
+            >
+              <Ionicons name={searchOpen ? 'close' : 'search'} size={18} color={searchOpen ? '#1a2332' : '#fff'} />
+            </Pressable>
             {showMetricToggle && (
               <View style={styles.metricToggle}>
                 <RNText style={[styles.metricLabel, metric === 'avgCoinIn' && styles.metricLabelActive]}>Coin-In</RNText>
                 <Switch
                   value={metric === 'avgWin'}
                   onValueChange={v => setMetric(v ? 'avgWin' : 'avgCoinIn')}
-                  trackColor={{ false: C.navy3 + '55', true: C.green + '88' }}
-                  thumbColor={metric === 'avgWin' ? C.green : C.navy3}
+                  trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#34d399' }}
+                  thumbColor={metric === 'avgWin' ? '#15803d' : '#cbd5e1'}
                   style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                 />
                 <RNText style={[styles.metricLabel, metric === 'avgWin' && styles.metricLabelActive]}>Win</RNText>
               </View>
             )}
-            <Pressable onPress={handleGenerateReport} style={styles.reportBtn}>
-              <Ionicons name="document-text-outline" size={15} color="#fff" />
-              {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
+            <Pressable onPress={handleGenerateReport} hoverScale={1.04}>
+              <LinearGradient
+                colors={['#e6c9a8', '#d4a574', '#b8935f']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.reportBtn}
+              >
+                <Ionicons name="document-text-outline" size={15} color="#1a2332" />
+                {isDesktop && <RNText style={styles.reportBtnText}>Generar Reporte</RNText>}
+              </LinearGradient>
             </Pressable>
             {profile && (
               <View style={[styles.roleBadge, profile.role === 'admin' ? styles.adminBadge : styles.viewerBadgeStyle]}>
@@ -821,30 +1553,65 @@ export default function DashboardScreen() {
                 </RNText>
               </View>
             )}
-            <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn}>
-              <Ionicons name="log-out-outline" size={22} color={C.navy3} />
+            <Pressable onPress={signOut} hitSlop={8} style={styles.logoutBtn} hoverScale={1.1}>
+              <Ionicons name="log-out-outline" size={22} color="rgba(255,255,255,0.85)" />
             </Pressable>
           </View>
-        </View>
+        </LinearGradient>
+
+        {/* Global search bar */}
+        {searchOpen && (
+          <View style={[styles.searchBar, { paddingHorizontal: gutter }]}>
+            <Ionicons name="search" size={16} color={C.muted} />
+            <TextInput
+              style={styles.searchInput}
+              value={explorerSearch}
+              onChangeText={setExplorerSearch}
+              placeholder="Buscar máquina por ID, juego, fabricante o ubicación (ej. 09-01)…"
+              placeholderTextColor={C.faint}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {explorerSearch.length > 0 && (
+              <Pressable onPress={() => setExplorerSearch('')} hitSlop={8} hoverScale={1.15}>
+                <Ionicons name="close-circle" size={18} color={C.muted} />
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {/* Tabs */}
-        <SegmentedTabs tabs={TABS} active={tab} onChange={setTab} gutter={gutter} />
+        <SegmentedTabs tabs={TABS} active={tab} onChange={handleTabChange} gutter={gutter} />
       </SafeAreaView>
 
       {!initialized ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={C.gold} />
-          <RNText style={styles.loadingText}>Cargando datos del piso...</RNText>
-        </View>
+        <DashboardSkeleton gutter={gutter} />
       ) : (
-        <>
-          {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} />}
-          {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} />}
-          {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
-          {tab === 'fabricantes' && <FabricantesSection gutter={gutter} />}
-          {tab === 'apuestas'    && <ApuestasSection gutter={gutter} />}
-          {tab === 'cambios'     && <CambiosSection gutter={gutter} />}
-        </>
+        <Animated.View
+          key={searching ? 'search' : tab}
+          entering={
+            searching ? FadeIn.duration(240)
+            : slideDir.current > 0 ? FadeInRight.duration(260)
+            : FadeInLeft.duration(260)
+          }
+          style={{ flex: 1 }}
+        >
+          {searching ? (
+            <SearchResults gutter={gutter} onEdit={setEditMachine} />
+          ) : (
+            <>
+              {tab === 'resumen'     && <ResumeSection metric={metric} gutter={gutter} onOpenBank={openBank} onOpenMfr={openMfr} />}
+              {tab === 'plano'       && <PlanoSection metric={metric} gutter={gutter} onOpenBank={openBank} />}
+              {tab === 'analisis'    && <AnalisisSection metric={metric} gutter={gutter} onOpenBank={openBank} />}
+              {tab === 'bancos'      && <BancosSection metric={metric} onEdit={setEditMachine} gutter={gutter} focusBank={focusBank} />}
+              {tab === 'comparativa' && <ComparativaSection metric={metric} gutter={gutter} />}
+              {tab === 'fabricantes' && <FabricantesSection gutter={gutter} highlightMfr={focusMfr} />}
+              {tab === 'apuestas'    && <ApuestasSection gutter={gutter} onEdit={setEditMachine} />}
+              {tab === 'cambios'     && <CambiosSection gutter={gutter} onOpenBank={openBank} />}
+            </>
+          )}
+        </Animated.View>
       )}
 
       <MachineEditSheet
@@ -860,59 +1627,59 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   root:     { flex: 1, backgroundColor: C.page },
-  topSafe:  { backgroundColor: C.card },
+  topSafe:  { backgroundColor: '#1a2332' },
   topBar: {
     flexDirection:    'row',
     justifyContent:   'space-between',
     alignItems:       'center',
     paddingHorizontal: 16,
     paddingVertical:   10,
-    backgroundColor:  C.card,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
   },
   brandRow:       { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#2457b5',
+    width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
+    shadowColor: '#d4a574', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 4,
   },
   logoMarkLg:     { width: 44, height: 44, borderRadius: 22 },
   logoChipRing: {
     width: 22, height: 22, borderRadius: 11,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(26,35,50,0.25)',
     alignItems: 'center', justifyContent: 'center',
   },
   logoChipRingLg: { width: 32, height: 32, borderRadius: 16 },
   logoMarkText:   { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
-  brandText:      { fontSize: 13, fontWeight: '600', color: C.navy3 },
-  brandTextLg:    { fontSize: 17, fontWeight: '700', color: C.navy },
+  brandText:      { fontSize: 13, fontWeight: '600', color: '#fff' },
+  brandTextLg:    { fontSize: 17, fontWeight: '700', color: '#fff', fontFamily: typography.display.fontFamily, letterSpacing: -0.2 },
   brandSub:       { fontSize: 11, color: C.muted, letterSpacing: 0.3, marginTop: 1 },
   periodChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
     alignSelf: 'flex-start',
-    backgroundColor: '#fdf5e7', borderRadius: 6,
+    backgroundColor: 'rgba(212,165,116,0.16)', borderRadius: 6,
     paddingHorizontal: 7, paddingVertical: 2,
-    borderWidth: 1, borderColor: C.gold + '55',
+    borderWidth: 1, borderColor: 'rgba(230,201,168,0.45)',
   },
-  periodChipText: { fontSize: 10, fontWeight: '700', color: '#b8863f', letterSpacing: 0.2 },
+  periodChipText: { fontSize: 10, fontWeight: '700', color: '#e6c9a8', letterSpacing: 0.2 },
   logoMarkTextLg: { fontSize: 12 },
   topRight:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: C.navy, borderRadius: 10,
+    borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 8,
+    shadowColor: '#d4a574', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 3,
   },
-  reportBtnText: { fontSize: 12, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  reportBtnText: { fontSize: 12, fontWeight: '700', color: '#1a2332', letterSpacing: 0.2 },
   metricToggle:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  metricLabel:    { fontSize: 11, fontWeight: '600', color: C.muted },
-  metricLabelActive: { color: C.navy, fontWeight: '700' },
+  metricLabel:    { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.55)' },
+  metricLabelActive: { color: '#fff', fontWeight: '700' },
   roleBadge:      { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  adminBadge:     { backgroundColor: '#f6ecdd', borderWidth: 1, borderColor: C.gold },
-  viewerBadgeStyle: { backgroundColor: '#eef1f5' },
+  adminBadge:     { backgroundColor: 'rgba(212,165,116,0.18)', borderWidth: 1, borderColor: '#d4a574' },
+  viewerBadgeStyle: { backgroundColor: 'rgba(255,255,255,0.10)' },
   roleText:       { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  adminText:      { color: C.gold },
-  viewerText:     { color: C.navy3 },
+  adminText:      { color: '#e6c9a8' },
+  viewerText:     { color: 'rgba(255,255,255,0.7)' },
   logoutBtn:      { padding: 2 },
 
   section:        { flex: 1 },
@@ -975,6 +1742,74 @@ const styles = StyleSheet.create({
   loading:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText:    { fontSize: 14, color: C.muted },
 
+  // ── Floor health card ───────────────────────────────────────────────────────
+  healthCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#0c121c',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  healthScoreBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 3,
+  },
+  healthScore:    { fontFamily: typography.display.fontFamily, fontSize: 36, fontWeight: '900', letterSpacing: -1.5, color: '#fff' },
+  healthScoreSub: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.75)' },
+  healthBody:     { flex: 1, gap: 4 },
+  healthTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  healthTitle:    { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.2, fontFamily: typography.display.fontFamily },
+  healthStatusChip: {
+    borderRadius: 999, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  healthStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  healthDetail:     { fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 19 },
+  healthFootnote:   { fontSize: 10.5, color: 'rgba(255,255,255,0.45)' },
+
+  // ── Global search ───────────────────────────────────────────────────────────
+  searchBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  searchBtnActive: {
+    backgroundColor: '#e6c9a8', borderColor: '#e6c9a8',
+  },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10,
+    backgroundColor: C.card,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: C.navy,
+    paddingVertical: 4,
+    ...(({ outlineStyle: 'none' } as any)),
+  },
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
+  skelKpi: {
+    flexGrow: 1, flexBasis: 200,
+    backgroundColor: C.card, borderRadius: 16, padding: 20, gap: 10,
+    borderWidth: 1, borderColor: C.border,
+  },
+  skelCard: {
+    backgroundColor: C.card, borderRadius: 16, padding: 20, gap: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
+
 
   // ── Apuestas sub-tabs ─────────────────────────────────────────────────────
   betTabRow: {
@@ -1024,22 +1859,6 @@ const styles = StyleSheet.create({
   },
   betHeroSub: { fontSize: 11, color: C.muted },
 
-  betRangeBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: C.card, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: C.border,
-  },
-  betRangeLabel: { fontSize: 12, fontWeight: '700', color: C.navy3 },
-  betRangeTrack: {
-    flex: 1, height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden', position: 'relative',
-  },
-  betRangeFill: {
-    height: '100%', backgroundColor: '#2d6a6a', borderRadius: 5,
-  },
-  betRangeMarker: {
-    position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, backgroundColor: C.gold,
-  },
-
   betSegPress: {
     backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
     borderColor: C.border, borderLeftWidth: 5, overflow: 'hidden',
@@ -1062,23 +1881,9 @@ const styles = StyleSheet.create({
   betStatLab: { fontSize: 10, color: C.muted, marginTop: 2 },
 
   betMachineList: {
-    backgroundColor: C.card, borderRadius: 14, borderWidth: 1,
+    borderRadius: 14, borderWidth: 1,
     borderColor: C.border, overflow: 'hidden', marginTop: -4,
   },
-  betMachineListHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: C.border,
-  },
-  betMcHeaderText: { fontSize: 10, fontWeight: '700', color: C.muted, letterSpacing: 0.4 },
-  betMachineRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 9,
-    paddingHorizontal: 14, gap: 8, backgroundColor: C.card,
-  },
-  betMcId:   { fontSize: 12, fontWeight: '800', color: C.navy, width: 42 },
-  betMcLoc:  { fontSize: 11, color: C.gold, fontWeight: '700', width: 46 },
-  betMcGame: { flex: 1, fontSize: 12, color: C.text },
-  betMcVal:  { fontSize: 13, fontWeight: '800', minWidth: 48, textAlign: 'right' },
 
   denoStatCard: {
     flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 16,
@@ -1158,25 +1963,40 @@ const styles = StyleSheet.create({
   mfrDot:         { width: 8, height: 8, borderRadius: 4 },
   tdMfr:          { fontSize: 12, fontWeight: '600', color: C.text },
 
-  changeSummary:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  changePill: {
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1,
+  cambiosFilterNote: {
+    fontSize: 12, color: C.muted, fontStyle: 'italic',
   },
-  changePillText: { fontSize: 12, fontWeight: '700' },
+  cambiosDateHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2,
+  },
+  cambiosDateText: {
+    fontSize: 12, fontWeight: '800', color: C.navy3, letterSpacing: 0.3,
+  },
+  cambiosDateCount: {
+    fontSize: 11, color: C.faint,
+  },
 
   changeRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    paddingHorizontal: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
+    paddingHorizontal: 16, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
   },
   changeTypeTag: {
-    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, minWidth: 96,
+    borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1,
+    minWidth: 104, alignItems: 'center',
   },
-  changeTypeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  changeInfo:     { flex: 1 },
-  changeMcId:     { fontSize: 13, fontWeight: '700', color: C.navy },
-  changeDetail:   { fontSize: 11, color: C.text, marginTop: 2 },
-  changePeriod:   { fontSize: 10, color: C.muted, marginTop: 1 },
-  changeDate:     { fontSize: 11, color: C.muted },
+  changeTypeText:     { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
+  changeInfo:         { flex: 1 },
+  changeMcId:         { fontSize: 15, fontWeight: '700', color: C.navy },
+  changeDetail:       { fontSize: 13, color: C.text, marginTop: 3 },
+  changeLocationLine: { fontSize: 13, color: C.navy3, marginTop: 2, fontWeight: '600' },
+  changePeriod:       { fontSize: 11, color: C.muted, marginTop: 2 },
+  changeDate:         { fontSize: 13, color: C.muted, fontWeight: '500' },
+  changeBankBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7,
+    backgroundColor: '#eef1f5', borderWidth: 1, borderColor: C.border,
+  },
+  changeBankBtnText: { fontSize: 11, fontWeight: '700', color: C.navy3 },
 
   emptyState: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12,
@@ -1190,6 +2010,58 @@ const styles = StyleSheet.create({
     marginTop: -4, marginBottom: 8,
     paddingHorizontal: 4,
   },
+
+  // ── Análisis ──────────────────────────────────────────────────────────────
+  anFindingsCard: { borderLeftWidth: 4, borderLeftColor: C.gold },
+  anFindingRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+  },
+  anFindingIcon: {
+    width: 28, height: 28, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 1,
+  },
+  anFindingText: { flex: 1, fontSize: 13, color: C.text, lineHeight: 19 },
+  anBold:        { fontWeight: '800', color: C.navy },
+  anChartNote: {
+    fontSize: 11.5, color: C.muted, lineHeight: 16, marginTop: 14,
+    backgroundColor: C.track, borderRadius: 8, padding: 10,
+  },
+  anStatGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
+  },
+  anStatTile: {
+    flexGrow: 1, flexBasis: 130, minWidth: 120,
+    backgroundColor: C.track, borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 12, gap: 2,
+  },
+  anStatValue: { fontSize: 18, fontWeight: '800', color: C.navy, letterSpacing: -0.4 },
+  anStatLabel: { fontSize: 10.5, fontWeight: '700', color: C.navy3, letterSpacing: 0.2, textTransform: 'uppercase' },
+  anStatHint:  { fontSize: 10, color: C.muted },
+  anSelPanel: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12,
+    marginTop: 12, padding: 12,
+    backgroundColor: C.track, borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  anSelTitle: { fontSize: 14, fontWeight: '800', color: C.navy },
+  anSelSub:   { fontSize: 11.5, color: C.muted, marginTop: 1 },
+  anSelQuadChip: {
+    alignSelf: 'flex-start', marginTop: 6,
+    borderRadius: 6, borderWidth: 1,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  anSelQuadText: { fontSize: 10, fontWeight: '700' },
+  anSelMetrics:  { flexDirection: 'row', gap: 16 },
+  anSelMetric:   { alignItems: 'center', gap: 1 },
+  anSelMetricVal:   { fontSize: 14, fontWeight: '800', color: C.navy },
+  anSelMetricLabel: { fontSize: 9, fontWeight: '700', color: C.muted, letterSpacing: 0.5 },
+  anSelBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.navy, borderRadius: 9,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  anSelBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   // ── Fabricantes redesign ──────────────────────────────────────────────────
   sectionIntro: {
@@ -1207,6 +2079,17 @@ const styles = StyleSheet.create({
   },
   mfrSummaryLabel: { fontSize: 11, color: C.muted, lineHeight: 15 },
 
+  mfrSortRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  mfrSortLabel: { fontSize: 12, fontWeight: '600', color: C.muted },
+  mfrSortPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  mfrSortPill: {
+    borderRadius: 999, paddingHorizontal: 13, paddingVertical: 6,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+  },
+  mfrSortPillActive:     { backgroundColor: C.navy, borderColor: C.navy },
+  mfrSortPillText:       { fontSize: 12, fontWeight: '600', color: C.muted },
+  mfrSortPillTextActive: { color: '#fff' },
+
   mfrCard: {
     backgroundColor: C.card, borderRadius: 16, overflow: 'hidden',
     borderWidth: 1, borderColor: C.border,
@@ -1214,6 +2097,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
   },
   mfrCardTop: { borderColor: '#f0d090', shadowOpacity: 0.12 },
+  mfrCardFocused: { borderColor: C.navy, borderWidth: 2 },
   mfrColorStripe: { height: 5 },
   mfrCardInner: { padding: 16, gap: 14 },
 
@@ -1251,7 +2135,8 @@ const styles = StyleSheet.create({
     height: 10, backgroundColor: C.track, borderRadius: 5, overflow: 'hidden',
     position: 'relative',
   },
-  mfrBarFill:    { height: '100%', borderRadius: 5 },
+  mfrBarFillWrap: { height: '100%', borderRadius: 5, overflow: 'hidden', minWidth: 6 },
+  mfrBarFill:     { flex: 1, borderRadius: 5 },
   mfrBarMidLine: {
     position: 'absolute', left: '52.6%', top: 0, bottom: 0,
     width: 2, backgroundColor: C.navy3 + '66',

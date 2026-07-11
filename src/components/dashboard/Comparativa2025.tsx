@@ -1,9 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, money, mfrColor, shortMfr, bankOf } from './shared';
-import { SLOT_FLOOR_2025, type SlotEntry2025 } from '@/data/slotFloor2025';
+import { C, money, mfrColor, shortMfr, bankOf, positionOf, useResponsive } from './shared';
+import { AnimatedPressable as Pressable } from './AnimatedPressable';
+import { AnimatedChevron } from './AnimatedChevron';
+import { DeltaBar } from './DeltaBar';
+import { SLOT_FLOOR_2025, SLOT_FLOOR_2025_BY_MACHINE, type SlotEntry2025 } from '@/data/slotFloor2025';
 import type { SlotMachine } from '@/types/domain';
 
 type Metric = 'avgCoinIn' | 'avgWin';
@@ -13,7 +17,16 @@ type Props = {
   metric: Metric;
 };
 
-type Row = { machine: SlotMachine; ref: SlotEntry2025 | null };
+// `relocatedFrom2025` is the position this machine occupied in the 2025 snapshot,
+// when it differs from its current position (i.e. it was moved since then).
+type Row = { machine: SlotMachine; ref: SlotEntry2025 | null; relocatedFrom2025: string | null };
+
+// A row is comparable only when the position has 2025 data AND the current
+// machine already has data entered — otherwise a new machine at an old
+// position would render as a false −100% drop.
+function isComparable(r: Row): boolean {
+  return r.ref !== null && r.machine.avgCoinIn != null && r.machine.avgWin != null;
+}
 
 type BankCompare = {
   bank: string;
@@ -27,12 +40,14 @@ type BankCompare = {
 
 // ── Delta math ────────────────────────────────────────────────────────────────
 
-type Delta = { diff: number; pct: number; dir: 'up' | 'down' | 'flat' };
+// `pct` is null when the 2025 baseline is exactly zero — there's no finite
+// percent change to show (matches groupDelta's null-on-zero-baseline rule).
+type Delta = { diff: number; pct: number | null; dir: 'up' | 'down' | 'flat' };
 
 function diffOf(now: number, then: number): Delta {
   const diff = now - then;
   if (Math.abs(diff) < 0.005) return { diff: 0, pct: 0, dir: 'flat' };
-  const pct = then !== 0 ? (diff / then) * 100 : 0;
+  const pct = then !== 0 ? (diff / then) * 100 : null;
   return { diff, pct, dir: diff > 0 ? 'up' : 'down' };
 }
 
@@ -45,7 +60,7 @@ function DeltaChip({ d, compact = false }: { d: Delta; compact?: boolean }) {
     <View style={[styles.deltaChip, { borderColor: color + '45', backgroundColor: color + '12' }]}>
       <Ionicons name={DIR_ICON[d.dir]} size={compact ? 9 : 10} color={color} />
       <Text style={[styles.deltaChipText, compact && { fontSize: 9 }, { color }]}>
-        {d.dir === 'up' ? '+' : ''}{d.pct.toFixed(1)}%
+        {d.pct == null ? 'nuevo' : `${d.dir === 'up' ? '+' : ''}${d.pct.toFixed(1)}%`}
       </Text>
     </View>
   );
@@ -57,7 +72,12 @@ function buildComparisons(machines: SlotMachine[]): BankCompare[] {
   const byBank = new Map<string, Row[]>();
   for (const m of machines) {
     const bank = bankOf(m.location);
-    const row: Row = { machine: m, ref: SLOT_FLOOR_2025[m.location] ?? null };
+    // Prefer the per-machine 2025 baseline (survives relocations); fall back
+    // to the position-based snapshot when this machine has no 2025 record.
+    const byMachine = SLOT_FLOOR_2025_BY_MACHINE[m.id];
+    const ref = byMachine ?? SLOT_FLOOR_2025[m.location] ?? null;
+    const relocatedFrom2025 = byMachine && byMachine.location2025 !== m.location ? byMachine.location2025 : null;
+    const row: Row = { machine: m, ref, relocatedFrom2025 };
     if (!byBank.has(bank)) byBank.set(bank, []);
     byBank.get(bank)!.push(row);
   }
@@ -65,8 +85,8 @@ function buildComparisons(machines: SlotMachine[]): BankCompare[] {
   return Array.from(byBank.entries())
     .map(([bank, rows]) => {
       const sorted = [...rows].sort((a, b) =>
-        parseInt(a.machine.location.split('-')[1] ?? '0', 10) - parseInt(b.machine.location.split('-')[1] ?? '0', 10));
-      const matchedRows = sorted.filter(r => r.ref !== null);
+        positionOf(a.machine.location) - positionOf(b.machine.location));
+      const matchedRows = sorted.filter(isComparable);
       const n = matchedRows.length || 1;
       const sum = (pick: (r: Row) => number) => matchedRows.reduce((s, r) => s + pick(r), 0);
       return {
@@ -94,6 +114,7 @@ function CompareMetric({ label, then, now, accent, active }: { label: string; th
         <Ionicons name="arrow-forward" size={11} color={C.faint} style={{ marginHorizontal: 4 }} />
         <Text style={[styles.metricNow, { color: accent }]}>{money(now, 0)}</Text>
       </View>
+      <DeltaBar then={then} now={now} width="100%" />
       <DeltaChip d={d} />
     </View>
   );
@@ -112,6 +133,9 @@ function CompareRow({ row }: { row: Row }) {
       <View style={styles.idCol}>
         <Text style={styles.machineId}>{m.id}</Text>
         <Text style={styles.location}>{m.location}</Text>
+        {row.relocatedFrom2025 && (
+          <Text style={styles.relocatedTag}>2025: {row.relocatedFrom2025}</Text>
+        )}
       </View>
 
       <View style={styles.gameCol}>
@@ -121,7 +145,7 @@ function CompareRow({ row }: { row: Row }) {
         </View>
       </View>
 
-      {ref ? (
+      {isComparable(row) && ref ? (
         <View style={styles.deltaPanel}>
           <MiniDelta label="CI"  then={ref.avgCoinIn} now={m.avgCoinIn ?? 0} color={C.navy3} />
           <View style={styles.miniDivider} />
@@ -129,7 +153,9 @@ function CompareRow({ row }: { row: Row }) {
         </View>
       ) : (
         <View style={styles.noMatch}>
-          <Text style={styles.noMatchText}>Sin dato 2025</Text>
+          <Text style={styles.noMatchText}>
+            {ref === null ? 'Sin dato 2025' : 'Máquina nueva · sin dato actual'}
+          </Text>
         </View>
       )}
     </View>
@@ -146,6 +172,7 @@ function MiniDelta({ label, then, now, color }: { label: string; then: number; n
         <Ionicons name="arrow-forward" size={9} color={C.faint} style={{ marginHorizontal: 3 }} />
         <Text style={[styles.miniNow, { color }]}>{money(now, 0)}</Text>
       </View>
+      <DeltaBar then={then} now={now} />
       <DeltaChip d={d} compact />
     </View>
   );
@@ -155,38 +182,53 @@ function MiniDelta({ label, then, now, color }: { label: string; then: number; n
 
 function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric }) {
   const [expanded, setExpanded] = useState(false);
-  const { width } = useWindowDimensions();
-  const isWide = width >= 720;
+  const { isPhone } = useResponsive();
+  const isWide = !isPhone;
   const bank = group.bank.padStart(2, '0');
 
   return (
     <View style={styles.card}>
-      <Pressable style={styles.cardHeader} onPress={() => setExpanded(e => !e)} android_ripple={{ color: '#f0f0f0' }}>
+      <Pressable
+        style={styles.cardHeader}
+        onPress={() => setExpanded(e => !e)}
+        android_ripple={{ color: '#f0f0f0' }}
+        scaleTo={0.995}
+        accessibilityRole="button"
+        accessibilityLabel={`Banco ${bank}`}
+        accessibilityState={{ expanded }}
+      >
         <View style={styles.bankBadge}>
           <Text style={styles.bankNum}>Banco</Text>
           <Text style={styles.bankNumLg}>{bank}</Text>
           <Text style={styles.bankCount}>{group.rows.length} máqs</Text>
           {group.matched < group.rows.length && (
-            <Text style={styles.bankUnmatched}>{group.rows.length - group.matched} sin 2025</Text>
+            <Text style={styles.bankUnmatched}>{group.rows.length - group.matched} sin comparar</Text>
           )}
         </View>
 
-        <View style={[styles.metricsRow, !isWide && styles.metricsRowNarrow]}>
-          <CompareMetric label="Avg Coin-In: 2025 → Actual" then={group.ci2025}  now={group.ciNow}  accent={C.navy3} active={metric === 'avgCoinIn'} />
-          <CompareMetric label="Avg Win: 2025 → Actual"     then={group.win2025} now={group.winNow} accent={C.green} active={metric === 'avgWin'} />
-        </View>
+        {group.matched > 0 ? (
+          <View style={[styles.metricsRow, !isWide && styles.metricsRowNarrow]}>
+            <CompareMetric label="Avg Coin-In: 2025 → Actual" then={group.ci2025}  now={group.ciNow}  accent={C.navy3} active={metric === 'avgCoinIn'} />
+            <CompareMetric label="Avg Win: 2025 → Actual"     then={group.win2025} now={group.winNow} accent={C.green} active={metric === 'avgWin'} />
+          </View>
+        ) : (
+          <View style={[styles.metricsRow, styles.noCompareBox]}>
+            <Ionicons name="information-circle-outline" size={14} color={C.muted} />
+            <Text style={styles.noCompareText}>Sin datos para comparar — máquinas nuevas pendientes de registro</Text>
+          </View>
+        )}
 
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={C.muted} />
+        <AnimatedChevron expanded={expanded} size={16} color={C.muted} />
       </Pressable>
 
       {expanded && (
-        <View style={styles.machineList}>
+        <Animated.View entering={FadeIn.duration(160)} style={styles.machineList}>
           <View style={styles.machineListHeader}>
             <Text style={styles.mlhText}>Posición · Juego · Fabricante</Text>
             <Text style={styles.mlhText}>2025 → Actual · Diferencia (fluctuación)</Text>
           </View>
           {group.rows.map(row => <CompareRow key={row.machine.id} row={row} />)}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -194,7 +236,27 @@ function BankCompareCard({ group, metric }: { group: BankCompare; metric: Metric
 
 // ── Section root ──────────────────────────────────────────────────────────────
 
+type DeltaFilter = 'all' | 'down' | 'up';
+
+const DELTA_FILTERS: { id: DeltaFilter; label: string }[] = [
+  { id: 'all',  label: 'Todos' },
+  { id: 'down', label: '↓ Solo caídas' },
+  { id: 'up',   label: '↑ Solo subidas' },
+];
+
+// Bank-level delta (%) for the active metric, or null when nothing is comparable.
+function groupDelta(g: BankCompare, metric: Metric): number | null {
+  if (g.matched === 0) return null;
+  const then = metric === 'avgWin' ? g.win2025 : g.ci2025;
+  const now  = metric === 'avgWin' ? g.winNow  : g.ciNow;
+  if (then === 0) return null;
+  return ((now - then) / then) * 100;
+}
+
 export function Comparativa2025({ machines, metric }: Props) {
+  const [filter, setFilter] = useState<DeltaFilter>('all');
+  const [sortWorst, setSortWorst] = useState(false);
+
   const groups = useMemo(() => buildComparisons(machines), [machines]);
 
   const totals = useMemo(() => {
@@ -202,6 +264,34 @@ export function Comparativa2025({ machines, metric }: Props) {
     const total   = groups.reduce((s, g) => s + g.rows.length, 0);
     return { matched, total };
   }, [groups]);
+
+  // Executive summary across comparable banks: average move + extremes.
+  const summary = useMemo(() => {
+    const withDelta = groups
+      .map(g => ({ bank: g.bank, delta: groupDelta(g, metric) }))
+      .filter((x): x is { bank: string; delta: number } => x.delta !== null);
+    if (!withDelta.length) return null;
+    const avg = withDelta.reduce((s, x) => s + x.delta, 0) / withDelta.length;
+    const worst = withDelta.reduce((a, b) => (b.delta < a.delta ? b : a));
+    const best  = withDelta.reduce((a, b) => (b.delta > a.delta ? b : a));
+    const down  = withDelta.filter(x => x.delta < 0).length;
+    return { avg, worst, best, down, up: withDelta.length - down };
+  }, [groups, metric]);
+
+  const visible = useMemo(() => {
+    let list = groups;
+    if (filter !== 'all') {
+      list = list.filter(g => {
+        const d = groupDelta(g, metric);
+        return d !== null && (filter === 'down' ? d < 0 : d >= 0);
+      });
+    }
+    if (sortWorst) {
+      list = [...list].sort((a, b) =>
+        (groupDelta(a, metric) ?? Infinity) - (groupDelta(b, metric) ?? Infinity));
+    }
+    return list;
+  }, [groups, filter, sortWorst, metric]);
 
   return (
     <View style={{ gap: 12 }}>
@@ -212,13 +302,78 @@ export function Comparativa2025({ machines, metric }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.introTitle}>Comparativa de rendimiento vs. 2025</Text>
           <Text style={styles.introSub}>
-            Cada posición del piso (ej. 09-01) comparada contra su misma posición en el snapshot 2025 ·
-            {' '}{totals.matched} de {totals.total} máquinas con dato histórico
+            Cada máquina comparada contra su propio rendimiento en el snapshot 2025 — si fue reubicada,
+            se muestra su posición anterior · {totals.matched} de {totals.total} máquinas comparables
           </Text>
         </View>
       </View>
 
-      {groups.map(g => <BankCompareCard key={g.bank} group={g} metric={metric} />)}
+      {/* Executive summary strip */}
+      {summary && (
+        <View style={styles.summaryStrip}>
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: summary.avg >= 0 ? C.green : C.red }]}>
+              {summary.avg >= 0 ? '+' : ''}{summary.avg.toFixed(1)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Cambio promedio{'\n'}({metric === 'avgWin' ? 'Win' : 'Coin-In'})</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={[styles.summaryValue, { color: C.red }]}>
+              Banco {summary.worst.bank.padStart(2, '0')} · {summary.worst.delta.toFixed(0)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Mayor caída</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={[styles.summaryValue, { color: C.green }]}>
+              Banco {summary.best.bank.padStart(2, '0')} · +{summary.best.delta.toFixed(0)}%
+            </Text>
+            <Text style={styles.summaryLabel}>Mayor subida</Text>
+          </View>
+          <View style={[styles.summaryItem, styles.summaryDivider]}>
+            <Text style={styles.summaryValue}>
+              <Text style={{ color: C.green }}>{summary.up} ↑</Text>
+              <Text style={{ color: C.faint }}>  ·  </Text>
+              <Text style={{ color: C.red }}>{summary.down} ↓</Text>
+            </Text>
+            <Text style={styles.summaryLabel}>Bancos</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Filter + sort controls */}
+      <View style={styles.controlsRow}>
+        <View style={styles.filterPills}>
+          {DELTA_FILTERS.map(f => (
+            <Pressable
+              key={f.id}
+              style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
+              onPress={() => setFilter(f.id)}
+              hoverScale={1.04}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === f.id }}
+            >
+              <Text style={[styles.filterPillText, filter === f.id && styles.filterPillTextActive]}>{f.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          style={[styles.sortBtn, sortWorst && styles.sortBtnActive]}
+          onPress={() => setSortWorst(s => !s)}
+          hoverScale={1.04}
+          accessibilityRole="button"
+          accessibilityState={{ selected: sortWorst }}
+        >
+          <Ionicons name="swap-vertical" size={13} color={sortWorst ? '#fff' : C.navy3} />
+          <Text style={[styles.sortBtnText, sortWorst && { color: '#fff' }]}>
+            {sortWorst ? 'Mayor caída primero' : 'Por posición'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {visible.map(g => <BankCompareCard key={g.bank} group={g} metric={metric} />)}
+      {visible.length === 0 && (
+        <Text style={styles.emptyFilter}>Ningún banco coincide con este filtro.</Text>
+      )}
     </View>
   );
 }
@@ -242,6 +397,55 @@ const styles = StyleSheet.create({
   introTitle: { fontSize: 14, fontWeight: '800', color: C.navy, marginBottom: 3 },
   introSub:   { fontSize: 11.5, color: C.navy3, lineHeight: 16 },
 
+  // Executive summary strip
+  summaryStrip: {
+    flexDirection: 'row',
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 12,
+  },
+  summaryItem:    { flex: 1, alignItems: 'center', paddingHorizontal: 8, gap: 3 },
+  summaryDivider: { borderLeftWidth: 1, borderLeftColor: C.border },
+  summaryValue:   { fontSize: 14, fontWeight: '800', color: C.navy, letterSpacing: -0.2, textAlign: 'center' },
+  summaryLabel:   { fontSize: 9.5, color: C.muted, fontWeight: '600', textAlign: 'center', lineHeight: 13 },
+
+  // Filter + sort controls
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  filterPill: {
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  filterPillActive:     { backgroundColor: C.navy, borderColor: C.navy },
+  filterPillText:       { fontSize: 12, fontWeight: '600', color: C.muted },
+  filterPillTextActive: { color: '#fff' },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  sortBtnActive: { backgroundColor: C.navy, borderColor: C.navy },
+  sortBtnText:   { fontSize: 12, fontWeight: '600', color: C.navy3 },
+  emptyFilter:   { fontSize: 13, color: C.faint, textAlign: 'center', paddingVertical: 20 },
+
   card: {
     backgroundColor: C.card,
     borderRadius: 16,
@@ -257,6 +461,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 14,
@@ -328,40 +533,48 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
-    minHeight: 64,
+    minHeight: 54,
     overflow: 'hidden',
   },
   accentBar: { width: 3, alignSelf: 'stretch' },
-  idCol: { width: 54, paddingVertical: 10, paddingLeft: 10, gap: 3 },
-  machineId: { fontSize: 14, fontWeight: '800', color: C.navy, letterSpacing: -0.3 },
-  location:  { fontSize: 10, fontWeight: '700', color: C.gold, letterSpacing: 0.3 },
-  gameCol: { flex: 1, paddingVertical: 10, paddingHorizontal: 10, gap: 5, minWidth: 120 },
-  game: { fontSize: 13, fontWeight: '600', color: C.text, lineHeight: 17 },
-  mfrPill: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1 },
-  mfrText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  idCol: { width: 62, paddingVertical: 7, paddingLeft: 8, gap: 2 },
+  machineId: { fontSize: 13, fontWeight: '800', color: C.navy, letterSpacing: -0.3 },
+  location:  { fontSize: 9, fontWeight: '700', color: C.gold, letterSpacing: 0.3 },
+  relocatedTag: { fontSize: 8, fontWeight: '600', color: C.muted, fontStyle: 'italic' },
+  gameCol: { flex: 1, paddingVertical: 7, paddingHorizontal: 8, gap: 4, minWidth: 110 },
+  game: { fontSize: 12, fontWeight: '600', color: C.text, lineHeight: 15 },
+  mfrPill: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1 },
+  mfrText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
 
   deltaPanel: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.track,
     borderRadius: 8,
-    marginVertical: 8,
-    marginRight: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    marginVertical: 5,
+    marginRight: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.border,
-    gap: 10,
+    gap: 8,
   },
-  miniDivider: { width: StyleSheet.hairlineWidth, height: 34, backgroundColor: '#d0d8e4' },
-  miniDelta: { alignItems: 'flex-start', gap: 2, minWidth: 110 },
-  miniLabel: { fontSize: 8, fontWeight: '700', color: C.muted, letterSpacing: 0.4, textTransform: 'uppercase' },
+  miniDivider: { width: StyleSheet.hairlineWidth, height: 30, backgroundColor: '#d0d8e4' },
+  miniDelta: { alignItems: 'flex-start', gap: 1, minWidth: 104 },
+  miniLabel: { fontSize: 7.5, fontWeight: '700', color: C.muted, letterSpacing: 0.4, textTransform: 'uppercase' },
   miniValuesRow: { flexDirection: 'row', alignItems: 'baseline' },
-  miniThen: { fontSize: 11, fontWeight: '600', color: C.faint, textDecorationLine: 'line-through' },
-  miniNow:  { fontSize: 13, fontWeight: '800', letterSpacing: -0.3 },
+  miniThen: { fontSize: 10, fontWeight: '600', color: C.faint, textDecorationLine: 'line-through' },
+  miniNow:  { fontSize: 12, fontWeight: '800', letterSpacing: -0.3 },
 
   noMatch: {
     paddingHorizontal: 16, paddingVertical: 10, marginRight: 8,
   },
   noMatchText: { fontSize: 11, color: C.muted, fontStyle: 'italic' },
+
+  noCompareBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.track, borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 12,
+  },
+  noCompareText: { fontSize: 11, color: C.muted, fontStyle: 'italic', flex: 1 },
 });

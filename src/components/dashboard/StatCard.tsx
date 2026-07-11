@@ -1,8 +1,11 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
-import { C, TONES, type Tone } from './shared';
+import { typography } from '@/theme';
+import { C, TONES, TONE_GRADIENTS, type Tone } from './shared';
+import { AnimatedPressable } from './AnimatedPressable';
 
 type Props = {
   label: string;
@@ -10,32 +13,45 @@ type Props = {
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: Tone;
   sub?: string;
+  /** When set, the card becomes pressable (e.g. tap-to-filter KPI cards). */
+  onPress?: () => void;
+  /** Tints the card with its tone when it represents an active filter/selection. */
+  active?: boolean;
 };
 
-export function StatCard({ label, value, icon, tone = 'navy', sub }: Props) {
+export function StatCard({ label, value, icon, tone = 'navy', sub, onPress, active }: Props) {
   const t = TONES[tone];
+  const gradient = TONE_GRADIENTS[tone];
+  const Wrapper = onPress ? AnimatedPressable : View;
+  const wrapperProps = onPress ? { onPress, hoverScale: 1.01 } : {};
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        {icon ? (
-          <View style={[styles.iconBadge, { backgroundColor: t.bg }]}>
-            <Ionicons name={icon} size={18} color={t.fg} />
-          </View>
-        ) : null}
-        <Text style={styles.label} numberOfLines={2}>{label}</Text>
+    <Wrapper
+      style={[styles.card, { shadowColor: t.fg }, active && { shadowOpacity: 0.22 }]}
+      {...wrapperProps}
+    >
+      <View style={[styles.cardInner, active && { backgroundColor: t.bg, borderColor: t.fg + '55' }]}>
+        <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topAccent} />
+        <View style={styles.header}>
+          {icon ? (
+            <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.iconBadge}>
+              <Ionicons name={icon} size={18} color="#fff" />
+            </LinearGradient>
+          ) : null}
+          <Text style={styles.label} numberOfLines={2}>{label}</Text>
+        </View>
+
+        <Text
+          style={[styles.value, { color: t.fg }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
+        >
+          {value}
+        </Text>
+
+        {sub ? <Text style={styles.sub}>{sub}</Text> : null}
       </View>
-
-      <Text
-        style={[styles.value, { color: t.fg }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.55}
-      >
-        {value}
-      </Text>
-
-      {sub ? <Text style={styles.sub}>{sub}</Text> : null}
-    </View>
+    </Wrapper>
   );
 }
 
@@ -45,17 +61,30 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 200,
     minWidth: 168,
-    backgroundColor: C.card,
     borderRadius: 18,
-    padding: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  // Separate from `card`: `overflow: hidden` clips the gradient accent bar
+  // to the rounded corners, but on iOS it also clips the drop shadow if
+  // applied to the same view — so the shadow lives on the outer `card`.
+  cardInner: {
+    borderRadius: 18,
+    backgroundColor: C.card,
     borderWidth: 1,
     borderColor: C.border,
-    shadowColor: '#1a2332',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 2,
+    padding: 20,
     gap: 12,
+    overflow: 'hidden',
+  },
+  topAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   header: {
     flexDirection: 'row',
@@ -80,6 +109,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   value: {
+    fontFamily: typography.display.fontFamily,
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.8,

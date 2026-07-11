@@ -1,7 +1,8 @@
 // Historical reference snapshot: per-machine Avg Coin-In / Avg Win by floor position, year 2025.
 // Source: Slot Floor Analizis 2025 (Bank Avg PDF), extracted with pdftotext -layout and parsed once.
-// Used exclusively by the 'Comparativa vs 2025' tab — matched against the live machines snapshot
-// by location (e.g. '09-01' 2025 vs '09-01' actual). Not stored in Supabase: it never changes.
+// Used by the 'Comparativa vs 2025' tab, matched primarily by machine id (`SLOT_FLOOR_2025_BY_MACHINE`)
+// so a relocated machine keeps its own 2025 baseline; falling back to position (`SLOT_FLOOR_2025`,
+// keyed '09-01' etc.) only when the live machine's id has no 2025 record. Not stored in Supabase: it never changes.
 
 export type SlotEntry2025 = {
   machine:      string;
@@ -299,3 +300,13 @@ export const SLOT_FLOOR_2025: Record<string, SlotEntry2025> = {
   '52-14': { machine: '2177', game: 'Flying Falcon', manufacturer: 'Ainsworth', denom: '0.01', avgCoinIn: 1486.33, avgWin: 151.78 },
   '52-15': { machine: '2178', game: 'Mighty Panther', manufacturer: 'Ainsworth', denom: '0.01', avgCoinIn: 3234.13, avgWin: 342.68 },
 };
+
+export type SlotEntry2025WithLocation = SlotEntry2025 & { location2025: string };
+
+// Reverse index by machine asset id, so a machine that has been physically
+// relocated since 2025 is still compared against its own 2025 numbers
+// instead of whatever machine now occupies its old position.
+export const SLOT_FLOOR_2025_BY_MACHINE: Record<string, SlotEntry2025WithLocation> =
+  Object.fromEntries(
+    Object.entries(SLOT_FLOOR_2025).map(([location2025, entry]) => [entry.machine, { ...entry, location2025 }]),
+  );

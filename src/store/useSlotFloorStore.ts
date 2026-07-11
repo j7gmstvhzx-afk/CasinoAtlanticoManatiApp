@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
+import { showErrorAlert } from '@/lib/alert';
 import type {
   SlotMachine, CoinInEntry, FloorStats, ExplorerFilters, MachineChange,
   SlotManufacturer, SlotMachineType,
@@ -210,6 +213,7 @@ interface SlotFloorStore {
   explorerFilters: ExplorerFilters;
 
   init:                 () => Promise<void>;
+  reset:                () => void;
   updateMachine:        (id: string, patch: Partial<SlotMachine>) => Promise<void>;
   batchUpdateMachines:  (ids: string[], patch: Partial<SlotMachine>) => Promise<void>;
   setExplorerSearch:    (q: string) => void;
@@ -251,16 +255,55 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
     }
   },
 
+  // ── reset ───────────────────────────────────────────────────────────────────
+  // Clear all cached floor data on sign-out so a second user on a shared
+  // device never sees the previous session's machines/changes, and so init()
+  // re-fetches cleanly on the next login.
+  reset() {
+    set({
+      initialized:     false,
+      machines:        [],
+      coinIn:          [],
+      machineChanges:  [],
+      floorStats:      EMPTY_STATS,
+      explorerSearch:  '',
+      explorerFilters: { manufacturer: null, type: null, denomination: null },
+    });
+  },
+
   // ── machine edits ─────────────────────────────────────────────────────────
   async updateMachine(id, patch) {
     const prev = get().machines.find(m => m.id === id);
+    if (!prev) return;
+
+    // Hard-gate on the admin role client-side so a viewer never even fires an
+    // optimistic edit that RLS will silently drop (server-side RLS is the real
+    // enforcement; this keeps the UI honest).
+    if (useAuthStore.getState().profile?.role !== 'admin') {
+      showErrorAlert('No tienes permiso para editar máquinas.');
+      return;
+    }
+
     const updated = get().machines.map(m => m.id === id ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
 
-    await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+    // .select() returns the affected rows: an RLS-blocked UPDATE succeeds with
+    // error === null but zero rows, so we must treat "no rows" as a denial and
+    // roll back — otherwise a blocked write appears to stick locally.
+    const { data: affected, error } = await supabase
+      .from('machines').update(machineToDbPatch(patch)).eq('id', id).select();
+    if (error || !affected || affected.length === 0) {
+      const rolledBack = get().machines.map(m => m.id === id ? prev : m);
+      set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
+      showErrorAlert(
+        error
+          ? `No se pudo guardar la máquina ${id}: ${error.message}`
+          : `No se pudo guardar la máquina ${id}: sin permiso o no encontrada.`,
+      );
+      return;
+    }
 
     // Auto-detect and record change type(s)
-    if (!prev) return;
     const newGame     = patch.game     ?? prev.game;
     const newLocation = patch.location ?? prev.location;
     const gameChanged     = newGame     !== prev.game;
@@ -332,11 +375,28 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
   },
 
   async batchUpdateMachines(ids, patch) {
+    if (useAuthStore.getState().profile?.role !== 'admin') {
+      showErrorAlert('No tienes permiso para editar máquinas.');
+      return;
+    }
+
     const idSet  = new Set(ids);
+    const prevById = new Map(get().machines.filter(m => idSet.has(m.id)).map(m => [m.id, m]));
     const updated = get().machines.map(m => idSet.has(m.id) ? { ...m, ...patch } : m);
     set({ machines: updated, floorStats: computeFloorStats(updated) });
-    for (const id of ids) {
-      await supabase.from('machines').update(machineToDbPatch(patch)).eq('id', id);
+
+    // As in updateMachine: an RLS-filtered UPDATE returns error === null with
+    // zero affected rows, so assert the write actually touched every target.
+    const { data: affected, error } = await supabase
+      .from('machines').update(machineToDbPatch(patch)).in('id', ids).select();
+    if (error || !affected || affected.length < ids.length) {
+      const rolledBack = get().machines.map(m => prevById.get(m.id) ?? m);
+      set({ machines: rolledBack, floorStats: computeFloorStats(rolledBack) });
+      showErrorAlert(
+        error
+          ? `No se pudieron guardar los cambios: ${error.message}`
+          : 'No se pudieron guardar los cambios: sin permiso para una o más máquinas.',
+      );
     }
   },
 
@@ -393,3 +453,9 @@ export const useSlotFloorStore = create<SlotFloorStore>((set, get) => ({
       .slice(0, n);
   },
 }));
+
+// Active (non-retired) machines — single source for every dashboard section.
+export function useActiveMachines(): SlotMachine[] {
+  const machines = useSlotFloorStore(s => s.machines);
+  return useMemo(() => machines.filter(m => m.active), [machines]);
+}

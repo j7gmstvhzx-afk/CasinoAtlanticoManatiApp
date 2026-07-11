@@ -16,17 +16,30 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <link rel="manifest" href="/app-manifest.json" />
         <meta name="theme-color" content="#1a2332" />
 
-        {/* Google Fonts — Playfair Display (display/headers) + Inter (body) */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800;900&display=swap"
-          rel="stylesheet"
-        />
+        {/* Self-hosted fonts — Playfair Display (display/headers) + Inter (body).
+            Variable WOFF2, latin subset (covers Spanish). Served from /fonts so
+            this internal tool makes zero runtime requests to third parties
+            (no usage leak to Google, no external supply-chain dependency). */}
+        <link rel="preload" href="/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/fonts/playfair-var-latin.woff2" as="font" type="font/woff2" crossOrigin="" />
 
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{
           __html: `
+            @font-face {
+              font-family: 'Inter';
+              font-style: normal;
+              font-weight: 300 800;
+              font-display: swap;
+              src: url(/fonts/inter-var-latin.woff2) format('woff2');
+            }
+            @font-face {
+              font-family: 'Playfair Display';
+              font-style: normal;
+              font-weight: 700 900;
+              font-display: swap;
+              src: url(/fonts/playfair-var-latin.woff2) format('woff2');
+            }
             *, *::before, *::after { box-sizing: border-box; }
             body { margin: 0; background: #f8f9fa; font-family: 'Inter', system-ui, sans-serif; }
             ::-webkit-scrollbar { width: 6px; height: 6px; }
